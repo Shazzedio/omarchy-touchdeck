@@ -61,7 +61,9 @@ Item {
       locked: root.sessionLocked,
       lockServiceFound: root.lockService !== null,
       config: configStore.summary(),
+      sensors: sensors.summary(),
       unplaced: root.unplacedCount,
+      render: { frames: root.renderFrames, busyMs: root.renderMs, at: Date.now() },
     })
   }
 
@@ -69,10 +71,45 @@ Item {
 
   readonly property ConfigStore configStore: ConfigStore { id: configStore }
 
+  // ------------------------------------------------------------ services
+  //
+  // One instance of each, shared by every widget on every window. Widgets are
+  // views: they bind to these and call their intents (DESIGN.md 4).
+
+  function localPath(url) {
+    return decodeURIComponent(String(url).replace(/^file:\/\//, ""))
+  }
+
+  // The helpers only run while something on screen needs them.
+  readonly property bool needsSensors: {
+    var items = configStore.items(0)
+    for (var i = 0; i < items.length; i++) {
+      var t = items[i].type
+      if (t === "cpu" || t === "gpu" || t === "memory") return true
+    }
+    return false
+  }
+
+  readonly property SensorsService sensors: SensorsService {
+    id: sensors
+    collectorPath: root.localPath(Qt.resolvedUrl("bin/touchdeck-collect"))
+    intervalMs: configStore.config.sensors.intervalMs
+    active: root.active && root.needsSensors
+  }
+
+  readonly property var services: ({ sensors: sensors })
+
   readonly property var appearance: configStore.config.appearance
   readonly property var displayConfig: configStore.config.display
 
   property int unplacedCount: 0
+
+  // Render accounting for DESIGN.md 15: how many frames the deck's window has
+  // drawn and the milliseconds spent drawing them, measured on the window
+  // itself so the rest of the shell's work doesn't blur the number. Sample
+  // `status` twice to get a rate.
+  property int renderFrames: 0
+  property real renderMs: 0
 
   Component.onCompleted: {
     // startVisible is only meaningful at load; after that, visibility is
@@ -163,6 +200,22 @@ Item {
       // the Omarchy bar) while reserving none of its own.
       exclusionMode: ExclusionMode.Normal
 
+      Item {
+        id: renderProbe
+        property real syncAt: 0
+        Connections {
+          target: renderProbe.Window.window
+          function onBeforeSynchronizing() { renderProbe.syncAt = Date.now() }
+          // Date.now() is millisecond-grained, but the rounding is unbiased
+          // over many frames, so the running total is a fair estimate.
+          function onFrameSwapped() {
+            root.renderFrames++
+            if (renderProbe.syncAt > 0) root.renderMs += Date.now() - renderProbe.syncAt
+            renderProbe.syncAt = 0
+          }
+        }
+      }
+
       DeckTheme {
         id: theme
         windowWidth: panel.width
@@ -207,7 +260,8 @@ Item {
         columns: root.appearance.columns
         rows: root.appearance.rows
         editing: root.editing
-        delegateSource: Qt.resolvedUrl("components/PlaceholderTile.qml")
+        services: root.services
+        widgetBase: String(Qt.resolvedUrl("Deck.qml")).replace(/Deck\.qml$/, "")
 
         onUnplacedItemsChanged: root.unplacedCount = unplacedItems.length
       }
