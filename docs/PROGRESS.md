@@ -1,79 +1,96 @@
 # Progress
 
-Current phase: **Phase 0 — spike and ground truth.** Nearly complete; one item
-needs Shannon at the touch display.
+Current phase: **Phase 1 complete — awaiting Shannon's go for Phase 2.**
 
-Phases are defined in `DESIGN.md` §17. Findings go in `DECISIONS.md`.
+Phases are defined in `DESIGN.md` §17. Findings and calls go in `DECISIONS.md`;
+how to test lives in `TESTING.md`.
 
 ---
 
-## Phase 0 — spike and ground truth
+## Phase 0 — spike and ground truth ✅
 
-Spike plugin: `~/.config/omarchy/plugins/shannon.touchdeck-spike/`
-(`shannon.touchdeck-spike`, currently **enabled**). Throwaway — deleted once the
-last item below is signed off.
+All acceptance items met. The spike plugin has been disabled and deleted.
+
+- [x] Window on the touch display only, at login, stays mounted — G-6
+- [x] Recolours live on a theme switch with no reload code — G-6
+- [x] Taps register at the right coordinates — all five targets hit, worst case
+      22 px off-centre on a 360 px pad (G-7)
+- [x] PipeWire and MPRIS import and bind from a third-party plugin — G-6
+- [x] `omarchy-shell shell call` reaches a method — G-5
+- [x] Tapping the deck moves Hyprland's focus: **yes**, by pointer and by finger;
+      §5.6 mitigation required (G-7)
+- [x] `keepLoaded` panels need `omarchy-restart-shell` to pick up code — D-1
+- [x] Go on D1 — recommended after Phase 0; Shannon started Phase 1 on it.
+
+---
+
+## Phase 1 — skeleton, theme adapter, grid ✅
+
+Built: `Deck.qml` (entry point, screen matching, lifecycle, IPC),
+`services/DeckTheme.qml` + `components/DeckSurface.qml` (the only two `qs.*`
+importers), `services/ConfigStore.qml`, `components/{DeckGrid,DeckText,Banner,
+PlaceholderTile}.qml`, pure `lib/{grid,config,theme}.mjs`, 53 Node tests, and
+`tools/check.sh`.
 
 ### Acceptance
 
-- [x] **A window appears on the touch display only, at login, and stays mounted.**
-      `hyprctl layers` → `HDMI-A-1 level=2 ns=touchdeck-spike 1536x838+512+1466`,
-      nothing on DP-1. It laid out below the bar and reserved no zone of its own.
-      Survived `omarchy-restart-shell` and reappeared with no `summon`, so a
-      `keepLoaded` panel does open itself on load (§5.7). — `DECISIONS.md` G-6
-- [x] **It recolours live on a theme switch with no reload code.**
-      Six themes cycled including two light ones, plus a text-size change;
-      every `Color`/`Style` token followed within ~1 s. §8.4's fallback hook is
-      not needed. — G-6
-- [ ] **Taps register at the right coordinates.** Touch mapping was already
-      configured (G-4) and the spike draws four corner targets plus a centre pad
-      that log window coordinates. **Needs one pass of Shannon's finger.**
-- [x] **As a third-party plugin, it imports `Quickshell.Services.Pipewire` and
-      `Quickshell.Services.Mpris` and reads the default output's volume and a
-      player's track title.** Read 45 % on the HECATE headset; external `wpctl`
-      volume and mute changes landed in <1.5 s; mpv appeared as
-      `identity: "mpv", title: "Touchdeck Spike Test.wav"` and vanished on kill. — G-6
-- [x] **`omarchy-shell shell call ...` reaches a method on it.** `status` and
-      `echo` both round-tripped; `summon`/`hide`/`toggle` work and the payload
-      arrives at `open()` verbatim. — G-5, G-6
-- [x] **Answered: does tapping it move Hyprland's focused monitor? (§5.6)**
-      Yes — confirmed with the pointer, and `Hyprland.focusedMonitor` tracks it
-      live. The §5.6 focus-restore mitigation is required. Touch-specific
-      confirmation rides along with the tap test above. — G-7
-- [x] **Answered: does a `keepLoaded` panel hot-reload on save, or need a shell
-      restart?** It needs `omarchy-restart-shell`. The shell's watcher fires and
-      the reload runs, but QML is re-served from the engine's component cache.
-      Reproduced twice. — `DECISIONS.md` D-1
-- [ ] **Go/no-go on D1, agreed with Shannon.** Recommendation: **go.** Every
-      assumption D1 rests on held on the real system — persistent window on a
-      chosen screen, live theming, PipeWire, MPRIS, IPC. Appendix B is not needed.
+- [x] **Shows only on the touch display; survives unplug/replug and
+      `omarchy-restart-shell`.** Layer `1536x838+512+1466` on HDMI-A-1, nothing
+      on DP-1. Disabling HDMI-A-1 made the deck dormant with the reason
+      `No screen matches description "Verbatim"` and removed its window;
+      re-adding the output (`hyprctl reload`) brought it back with no deck code
+      involved. Restarts: several, each came back unsummoned.
+- [x] **§8.5 passes with placeholder tiles.** All 22 installed themes, scripted:
+      for each, the rendered pixel in an empty cell matched that theme's
+      `colors.toml` background exactly (22/22, five of them light), and the deck
+      stayed active through every switch. Eyeballed `white` (light + monochrome),
+      `catppuccin-latte` and text size 16: text, borders and status swatches
+      follow the theme and stay legible. Theme and text size restored.
+- [x] **Hand edits apply live; broken JSON shows the banner and keeps the layout.**
+      Shrinking the grid to 8×6 in the file applied live and parked 3 items.
+      Breaking the JSON showed `config.json line 4: expected a property name,
+      found ','` and kept the layout. Restarting the shell *on* the broken file
+      came up on the backup layout (D-11). Fixing it cleared the banner live.
+- [x] **`tools/check.sh` passes.** Exit 0. Skips, both expected: the collector
+      (Phase 2) and `shellcheck` (not installed, D-8).
 
-### Also recorded
+Also verified: `hide` / `summon` (with `{"edit":true}` → edit mode, "+" in free
+cells only) / `toggle` / `toggleEdit` / `reloadConfig` / `status`, all at window
+level. The Omarchy lock service is found (`lockServiceFound: true`), so the deck's
+`active` flag will drop while locked.
 
-Versions, hardware, both displays, the plugin host contract, the Hyprland Lua
-dispatcher surface, the first-party launch path, verified `nvidia-smi` fields,
-and a keybind conflict — all in `DECISIONS.md` G-1 … G-11.
+### Bugs found and fixed in Phase 1
 
-### Deviations from `DESIGN.md` found in Phase 0
-
-| Design says | Reality | Recorded as |
+| What | How it showed | Fix |
 |---|---|---|
-| Deck canvas 1920×1080, ~105 px cells | 1536×864 logical (scale 1.25), 96 px cells | G-3, D-3 |
-| Match screens by `description` | Quickshell has no `description`; use `model` | G-3, D-2 |
-| Plugin code hot-reloads on save | Needs `omarchy-restart-shell` | D-1 |
-| Shannon must add a touch-mapping snippet | Already present in `input.lua` | G-4 |
-| Toggle on `SUPER + CTRL + D` | Taken by Omarchy's Display panel | G-11, D-7 |
-| Hyprland 0.55+ | 0.56.2; `hl.dsp.focus({ monitor = … })` is the form | G-1, G-8 |
-| `nvidia-smi` and sysfs agree on PCI address | 8-digit vs 4-digit domain; normalise | G-10 |
+| Object spread in `lib/` | Node tests passed; the QML engine refused the module and the whole deck failed to load | `Object.assign`; gate now lints `lib/*.mjs` under the QML parser (D-10) |
+| Deploy one-liner gated on `grep "FAIL"` | Deployed a build the gate had just failed | Gate on `check.sh`'s exit code (D-10) |
+| Cold start on a broken config | Defaults shown instead of the user's layout | Restore from `config.json.bak` (D-11) |
+| QML `JSON.parse` says only "Parse error" | Banner could not name a line | Own JSON error locator (D-13) |
+| Tiles mounted via `sourceComponent` | A `TypeError` burst on every load | `Loader.setSource` with initial properties (D-15) |
+| Redundant `configChanged` signal | qmllint duplicate-name warning | Removed; the property already notifies |
 
-### Left to do in Phase 0
+### Not covered, and why
 
-1. Shannon taps the four corners and the centre pad on the deck (see below).
-2. Read the tap log back, confirm coordinates and the touch-focus behaviour.
-3. Sign off D1 go/no-go.
-4. Delete the spike plugin and disable it.
+- **Lock / unlock** — it needs a person to unlock, so it isn't scripted. Wiring is
+  verified (lock service found); the behaviour belongs to the manual checklist.
+- **`omarchy font set`** — it rewrites fontconfig and restarts the shell. The
+  deck binds the same `monospace` alias Omarchy's own shell does. Manual checklist.
+- **Scale 1** — only scale 1.25 (current) was exercised. The grid is fitted to
+  the window and unit-tested at other sizes; manual checklist.
+
+### For Shannon to apply (optional)
+
+Toggle keybind, `~/.config/hypr/bindings.lua` — `SUPER + CTRL + D` is taken by
+Omarchy's Display panel (G-11), so:
+
+```lua
+o.bind("SUPER + CTRL + SHIFT + D", "Toggle Touchdeck", "omarchy-shell shell toggle shannon.touchdeck '{}'")
+```
 
 ---
 
-## Phase 1 — skeleton, theme adapter, grid
+## Phase 2 — sensors and monitoring widgets
 
-Not started.
+Not started. First step per §16: capture real fixtures from this machine
+(`/proc/stat`, `/proc/meminfo`, hwmon, drm, `nvidia-smi` lines).

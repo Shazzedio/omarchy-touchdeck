@@ -55,6 +55,8 @@ Two consequences:
   310 mm-wide 1920 px panel — comfortably above the 10 mm minimum in §10.
   `DeckTheme.touchScale` should therefore be calibrated against ~96, not the
   ~105 the design guessed from a scale-1 assumption.
+  *(Measured in Phase 1: after the bar, margin and gaps the fitted cell is
+  89×85 logical, about 17 mm. See D-17.)*
 - Matching by description works: `"verbatim"` is a case-insensitive substring of
   Quickshell's `model`. Note Quickshell's `ShellScreen` exposes `name`, `model`,
   `serialNumber` — **there is no `description` or `manufacturer` property**, so
@@ -135,9 +137,13 @@ implement the §5.6 mitigation: remember the last focused non-deck monitor and
 restore focus to it ~250 ms after the last touch.
 
 The spike's tracking of "last focused non-deck monitor" works and the restore
-dispatcher exists (see G-8). **Still to confirm with a real finger:** whether a
-*touch* down behaves like the pointer here. The spike logs the focused monitor at
-tap time, so one tap on it answers this.
+dispatcher exists (see G-8).
+
+**Confirmed with a real finger** (start of Phase 1): Shannon tapped all four corner
+targets and the centre pad. Every tap logged `focus=HDMI-A-1`, and focus returned to
+DP-1 only when the pointer went back. All five taps landed inside their targets;
+the furthest from centre was 22 px off on a 360 px pad, which is finger placement,
+not mapping error. Touch mapping (G-4) is accurate across the whole surface.
 
 ### G-8 Hyprland dispatch from Lua
 
@@ -323,3 +329,144 @@ are filtered as known-benign: grouped-property access through `QtObject`
 properties (`Style.font.family`, `Color.popups.border` — qmllint cannot see
 through a `QtObject` property, and Omarchy's own code trips the same warning),
 and `PanelWindow is not creatable` (it is created by Quickshell, not QML).
+
+---
+
+## Calls made in Phase 1
+
+### D-10 `lib/` must stay inside the QML engine's JavaScript dialect
+
+**Context.** `lib/*.mjs` runs in two engines: Node for the tests, and Qt's QML
+engine inside the shell. They accept different JavaScript. Object spread
+(`{ ...a }`, ES2018) is fine in Node and a *syntax error* in the QML engine. The
+JSON error locator used it; every Node test passed, and on restart the shell logged
+`Script .../lib/config.mjs unavailable`, which took the **whole deck** down
+(`call ... status` returned `unknown`).
+
+**Decision.** No object spread in `lib/` — use `Object.assign`. `tools/check.sh`
+now runs `qmllint` directly on every `lib/*.mjs`, which parses it with the QML
+engine's parser and fails on exactly this (verified: a one-line spread module
+exits 255 with `Unexpected token '...' [syntax]`).
+
+**Consequence.** Node-only syntax fails the gate instead of the touch display.
+Also fixed: my deploy one-liner gated on `grep` finding "FAIL" in the check output,
+which *succeeds* when the check fails. Deploys now gate on `check.sh`'s exit code.
+
+### D-11 A cold start on a broken `config.json` restores the backup, not the defaults
+
+**Context.** §12 says broken JSON must not lose the layout. Within a session that
+held — the last good config stays in memory. But after `omarchy-restart-shell` (or
+a login) on a broken file there *is* no last good config in memory, and the deck
+fell back to the defaults: the user's layout was effectively gone until they fixed
+the file. `config.json.bak` was being written on every good load and never read.
+
+**Decision.** When the first load of a session fails to parse, `ConfigStore` reads
+`config.json.bak` and runs on that, still showing the banner and still refusing to
+write. If the backup is missing or also broken, the defaults stand.
+
+**Consequence.** Verified: restarted the shell on a deliberately broken file whose
+backup held an 8×6 hand edit; the deck came up on the 8×6 layout (3 items parked),
+with the banner reading `config.json line 4: expected a property name, found ','`.
+
+### D-12 A config file that vanishes mid-session is rewritten, not reset
+
+**Context.** A missing file means "first run, write the defaults". Applied
+mid-session, that rule would replace someone's layout with the defaults the moment
+the file was deleted or truncated — by accident, by an editor's save dance, or by a
+sync tool.
+
+**Decision.** Defaults are written only if nothing has loaded yet this session.
+After that, a missing or empty file gets the in-memory layout written back, with a
+log line saying so.
+
+**Consequence.** Deleting `config.json` is no longer a "reset to defaults" gesture.
+If that is wanted later it should be an explicit IPC method, not a side effect.
+
+### D-13 JSON errors are located by our own scanner
+
+**Context.** §12's banner promises "config.json line 42: unexpected ','". Node's
+`JSON.parse` reports a position; the **QML engine's reports only `Parse error`** —
+no position, nothing to put in a banner.
+
+**Decision.** `lib/config.mjs` has a small tokenizer plus recursive-descent
+validator (`locateJsonError`) that runs only after `JSON.parse` has already failed,
+and reports the line and column of the token it found, with messages written for
+the mistakes people actually make: `trailing ',' before '}'`, `JSON needs double
+quotes`, `unterminated string`, `expected ',' or '}'`.
+
+**Consequence.** It always points at the token *found*, consistently — so a missing
+`:` after `"a"` on line 2 reports the `}` on line 3. Covered by
+`tests/jsonerror.test.mjs`, which also asserts every case really is invalid JSON so
+the tests can't pass vacuously.
+
+### D-14 Status-colour legibility is two questions, not one
+
+**Context.** §8.3 takes ok/warn/critical from the theme's `green`/`yellow`/`red`.
+Measured across all 22 installed themes, several make those unusable: `lumon` is
+three blues, `hackerman` three greens, `white` and `vantablack` greyscale, and
+`everforest`/`osaka-jade` put green and yellow side by side. On a monitoring deck, a
+critical temperature that looks normal is a functional failure.
+
+**Decision.** `DeckTheme` exposes `criticalDistinct` and `warnDistinct` separately
+(threshold 0.10 on a channel-weighted RGB distance), because they have different
+consequences: when critical isn't distinct, widgets must add a non-colour cue
+(weight, a marked track); when only warn blurs into ok, that band needs the cue.
+The four monochrome themes come out critical-blind.
+
+**Consequence.** The theme test asserts invariants — the monochrome themes are
+caught, the clearly hued ones aren't — rather than pinning the full roster, because
+`gruvbox` sits 0.0015 above the threshold and a cosmetic upstream tweak would
+otherwise fail the suite. Phase 2 widgets consume these flags.
+
+### D-15 Grid tiles mount through `Loader.setSource`
+
+**Context.** With `Loader.sourceComponent`, the only hook to hand a tile its
+`theme` is `onLoaded`, which runs after the tile's bindings first evaluate — so
+every tile spent its first frame dereferencing a null theme (a burst of
+`TypeError`s in the shell log on every load).
+
+**Decision.** `DeckGrid` takes a `delegateSource` URL and mounts tiles with
+`setSource(url, { theme, entry })`, which sets those properties before the first
+binding. `editing` and `cellSize`, which change over a tile's life, are bound in
+`onLoaded`.
+
+**Consequence.** Clean logs. Phase 2's widget registry maps widget type to a URL,
+which fits this naturally.
+
+### D-16 First-run app keys are filled in Phase 3, not Phase 1
+
+**Context.** §6 has first run fill three keys from the default browser, file
+manager and terminal. That needs process calls (`xdg-settings`, `xdg-mime`) and a
+desktop-entry resolver — which is `AppsService`, a Phase 3 deliverable.
+
+**Decision.** The default layout carries the three app keys with a one-shot
+`settings.defaultRole` of `browser`, `files` or `terminal`. Phase 3's `AppsService`
+resolves each to a desktop id the first time it can, then clears the hint.
+
+**Consequence.** No throwaway discovery code in Phase 1, and the layout on disk is
+already the final shape.
+
+### D-17 Cells are fitted, not square: 89×85 logical on this display
+
+**Context.** D-3 estimated 96 px cells from the logical canvas alone. The real grid
+also loses the bar (26 px), a margin and 15/8 gaps.
+
+**Decision.** Keep the grid fitted to the window, not forced square. On
+HDMI-A-1 today: **89×85 logical ≈ 111×106 physical px ≈ 17 mm**, still far above
+§10's 10 mm floor. `touchScale` is computed from the window size rather than the
+fitted cell (the grid's gap and margin come *from* `touchScale`, so deriving it from
+the cell would be circular); it lands at 0.97.
+
+**Consequence.** A "2×2" key is 184×176, very slightly wide. Invisible in practice.
+
+### D-18 Development install is a copy, not a symlink
+
+**Context.** §14 suggests making the plugin path a symlink to the working copy.
+Hot reload doesn't work anyway (D-1), and the repo holds `docs/` and `.git`, which
+don't belong in an installed plugin.
+
+**Decision.** Deploy is `rsync -a --delete --exclude .git --exclude docs` into
+`~/.config/omarchy/plugins/shannon.touchdeck/`, then `omarchy-restart-shell` — and
+only after `tools/check.sh` exits 0.
+
+**Consequence.** What runs is exactly what passed the gate.
