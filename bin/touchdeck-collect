@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# touchdeck-collect: the deck's one long-running sensor reader (DESIGN.md D4).
+#
+# Reads /proc and /sys once per interval and prints one frame of raw values to
+# stdout. It does no arithmetic and no interpretation: every delta, unit and
+# threshold lives in lib/*.mjs, where it is unit-tested. SensorsService starts
+# it only while the deck is on screen; it exits on SIGTERM, or on SIGPIPE when
+# its reader goes away.
+#
+# Cheap enough to run every second forever (DESIGN.md 15): the loop never
+# forks. Files are read with `read`, time comes from $EPOCHREALTIME, the sleep
+# is `read -t` on a pipe nobody writes to, and each frame is written to stdout
+# in a single write.
+#
+# Frame format (DESIGN.md Appendix A):
+#   @frame <unix-ms>
+#   @stat                          the cpu lines of /proc/stat, verbatim
+#   @meminfo                       MemTotal, MemAvailable, SwapTotal, SwapFree
+#   @cpufreq                       cpuN=<kHz>
+#   @hwmon <id> <name>             CPU temperature chips only: tempN_label=, tempN_input=
+#   @drm <pci> <vendor> <driver>   one per GPU; amdgpu adds busy %, VRAM and its hwmon values
+#   @end
+# Sections for files that don't exist are simply absent.
+#
+# Settings (flags win over the environment):
+#   TOUCHDECK_INTERVAL_MS  --interval-ms N   default 1000, minimum 50
+#   TOUCHDECK_SYSROOT      --sysroot DIR     prefix for /proc and /sys (tests)
+#   TOUCHDECK_FRAMES       --frames N        stop after N frames; 0 runs forever
+#                          --selftest        two quick frames from this machine, checked
+
+set -u
+shopt -s nullglob
+
+ROOT="${TOUCHDECK_SYSROOT:-}"
+INTERVAL_MS="${TOUCHDECK_INTERVAL_MS:-1000}"
+FRAMES="${TOUCHDECK_FRAMES:-0}"
+SELFTEST=0
+
+while (($#)); do
+  case "$1" in
+    --interval-ms) INTERVAL_MS="${2:-}"; shift 2 || shift ;;
+    --sysroot) ROOT="${2:-}"; shift 2 || shift ;;
+    --frames) FRAMES="${2:-}"; shift 2 || shift ;;
+    --selftest) SELFTEST=1; shift ;;
+    *) printf 'touchdeck-collect: unknown argument: %s\n' "$1" >&2; exit 2 ;;
+  esac
+done
+
+[[ $INTERVAL_MS =~ ^[0-9]+$ ]] && ((INTERVAL_MS >= 50)) || INTERVAL_MS=1000
+[[ $FRAMES =~ ^[0-9]+$ ]] || FRAMES=0
+
+# CPU temperature chips. GPU chips are read through their drm device instead,
+# so they can be keyed by PCI address rather than hwmonN (Appendix A).
+CPU_CHIPS=" coretemp k10temp zenpower "
+
+OUT=""   # the frame being built; written in one go by emit_frame
+
+# read_value <file>: sets VALUE to the file's first line. Fails if unreadable.
+read_value() {
+  VALUE=""
+  [[ -r $1 ]] || return 1
+  IFS= read -r VALUE < "$1" 2>/dev/null || [[ -n $VALUE ]]
+}
+
+add() { OUT+="$1"$'\n'; }
+
+emit_stat() {
+  local file="$ROOT/proc/stat" line
+  [[ -r $file ]] || return 0
+  add "@stat"
+  while IFS= read -r line; do
+    # The cpu lines come first. What follows -- `intr` alone runs to
+    # thousands of numbers -- isn't needed, so stop at the first other line.
+    [[ $line == cpu* ]] || break
+    add "$line"
+  done < "$file"
+}
+
+emit_meminfo() {
+  local file="$ROOT/proc/meminfo" line
+  [[ -r $file ]] || return 0
+  add "@meminfo"
+  while IFS= read -r line; do
+    case $line in
+      MemTotal:*|MemAvailable:*|SwapTotal:*) add "$line" ;;
+      SwapFree:*) add "$line"; break ;;
+    esac
+  done < "$file"
+}
+
+emit_cpufreq() {
+  local files=("$ROOT"/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq) f cpu
+  ((${#files[@]})) || return 0
+  add "@cpufreq"
+  for f in "${files[@]}"; do
+    read_value "$f" || continue
+    cpu=${f%/cpufreq/*}
+    add "${cpu##*/}=$VALUE"
+  done
+}
+
+# emit_chip <dir> <prefix>: the temperature, power and fan attributes of one chip.
+emit_chip() {
+  local dir=$1 prefix=$2 f
+  for f in "$dir"/temp*_label "$dir"/temp*_input \
+           "$dir"/power1_average "$dir"/power1_input "$dir"/fan1_input; do
+    read_value "$f" || continue
+    add "$prefix${f##*/}=$VALUE"
+  done
+}
+
+emit_hwmon() {
+  local dir
+  for dir in "$ROOT"/sys/class/hwmon/hwmon*; do
+    read_value "$dir/name" || continue
+    [[ $CPU_CHIPS == *" $VALUE "* ]] || continue
+    add "@hwmon ${dir##*/} $VALUE"
+    emit_chip "$dir" ""
+  done
+}
+
+emit_drm() {
+  local card dev vendor pci driver key val hw
+  for card in "$ROOT"/sys/class/drm/card[0-9]*; do
+    [[ ${card##*/} == *-* ]] && continue   # connectors, e.g. card1-DP-1
+    dev="$card/device"
+    read_value "$dev/vendor" || continue
+    vendor=$VALUE
+    pci=""
+    driver=""
+    if [[ -r $dev/uevent ]]; then
+      # uevent carries the PCI address, so no readlink (and no fork) is needed
+      # to resolve the device symlink.
+      while IFS='=' read -r key val; do
+        case $key in
+          PCI_SLOT_NAME) pci=$val ;;
+          DRIVER) driver=$val ;;
+        esac
+      done < "$dev/uevent"
+    fi
+    [[ -n $pci ]] || continue   # not a PCI GPU (e.g. a simple framebuffer)
+    add "@drm $pci $vendor ${driver:-unknown}"
+    # NVIDIA data comes from the nvidia-smi stream and Intel's needs perf
+    # privileges, so for those the header alone (detection) is the point.
+    [[ $vendor == 0x1002 ]] || continue
+    for key in gpu_busy_percent mem_info_vram_used mem_info_vram_total; do
+      read_value "$dev/$key" && add "$key=$VALUE"
+    done
+    for hw in "$dev"/hwmon/hwmon*; do
+      emit_chip "$hw" "hwmon."
+    done
+  done
+}
+
+emit_frame() {
+  local us=${EPOCHREALTIME//[.,]/}   # microseconds; the separator is locale-dependent
+  OUT=""
+  add "@frame $((us / 1000))"
+  emit_stat
+  emit_meminfo
+  emit_cpufreq
+  emit_hwmon
+  emit_drm
+  add "@end"
+  printf '%s' "$OUT"
+}
+
+run() {
+  # A pipe nobody writes to: `read -t` on it is a sleep that doesn't fork.
+  exec {SLEEP_FD}<> <(:)
+  local n=0 next now delay secs
+  next=${EPOCHREALTIME//[.,]/}
+  while :; do
+    emit_frame
+    n=$((n + 1))
+    ((FRAMES > 0 && n >= FRAMES)) && return 0
+    # Pace against a deadline rather than sleeping a fixed interval after the
+    # work, so frames arrive on a steady clock and staleness means something.
+    next=$((next + INTERVAL_MS * 1000))
+    now=${EPOCHREALTIME//[.,]/}
+    delay=$((next - now))
+    if ((delay <= 0)); then
+      next=$now   # fell behind (suspend, a slow read): catch up, don't burst
+      continue
+    fi
+    printf -v secs '%d.%06d' $((delay / 1000000)) $((delay % 1000000))
+    read -r -t "$secs" -u "$SLEEP_FD" _ || :
+  done
+}
+
+selftest() {
+  local out line frames=0 ends=0 stats=0
+  out=$(TOUCHDECK_FRAMES=2 TOUCHDECK_INTERVAL_MS=50 TOUCHDECK_SYSROOT="$ROOT" bash "${BASH_SOURCE[0]}") || return 1
+  while IFS= read -r line; do
+    case $line in
+      '@frame '*) frames=$((frames + 1)) ;;
+      '@end') ends=$((ends + 1)) ;;
+      '@stat') stats=$((stats + 1)) ;;
+    esac
+  done <<< "$out"
+  if ((frames == 2 && ends == 2 && stats == 2)); then
+    printf 'touchdeck-collect selftest ok: 2 frames\n'
+  else
+    printf 'touchdeck-collect selftest failed: %d frames, %d ends, %d stat sections\n' \
+      "$frames" "$ends" "$stats" >&2
+    return 1
+  fi
+}
+
+if ((SELFTEST)); then
+  selftest
+  exit
+fi
+run

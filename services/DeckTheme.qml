@@ -100,6 +100,9 @@ QtObject {
   // read these need no special case.
 
   readonly property int pressDuration: root.reduceMotion ? 0 : 80
+  // Smaller changes to a live value land without easing, so once-a-second
+  // sensor wobble doesn't redraw the deck at 60 fps (see EasedValue.qml).
+  readonly property real easeThreshold: 8
   readonly property int valueDuration: root.reduceMotion ? 0 : 250
   readonly property int editDuration: root.reduceMotion ? 0 : 150
 

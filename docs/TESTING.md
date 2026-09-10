@@ -17,8 +17,9 @@ tools/check.sh
 | no symlinks | a plugin folder the installer would reject |
 | `qmllint` on every `.qml` | QML errors that otherwise only appear after a shell restart (hot reload does not work, `DECISIONS.md` D-1) |
 | `qmllint` on every `lib/*.mjs` | JavaScript Node accepts but the QML engine refuses — this took the whole deck down once (D-10) |
-| `node --test` | the grid engine (including a 4 000-step fuzz), config handling, JSON error location, theme maths across every installed theme |
-| collector fixtures | from Phase 2 |
+| `node --test` | the grid engine (including a 4 000-step fuzz), config handling, JSON error location, theme maths across every installed theme, every sensor parser, the sensor model's exact figures, the widget registry, and the collector run for real against each fixture sysroot |
+| QML-engine parity | the same scenario through `lib/` in Node and in a headless `qs`, results compared — catches a library method Qt's engine lacks, which linting can't (D-21). Needs a Wayland session |
+| collector selftest | `bin/touchdeck-collect --selftest` produces two well-formed frames on this machine |
 | `shellcheck` | skipped with a warning when not installed (D-8) |
 | guards | `qs.*` imports outside the two adapters (D7), colour literals in QML, synchronous I/O in QML |
 
@@ -43,6 +44,29 @@ grim -o HDMI-A-1 /tmp/deck.png                          # what the deck actually
 
 Escape hatch if the deck ever misbehaves: `omarchy plugin disable shannon.touchdeck`
 then `omarchy-restart-shell`.
+
+## Sensor fixtures
+
+`tests/fixtures/sysroots/` holds miniature `/proc` + `/sys` trees the collector reads
+via `TOUCHDECK_SYSROOT`: one captured from this machine, two synthetic (AMD, and
+Intel + NVIDIA + AMD). See `tests/fixtures/README.md`.
+
+- Capture a real one from whatever hardware is installed:
+  `tools/capture-fixture.sh <name>` — e.g. `intel-nvidia-radeon` once the Radeon is in.
+- Rebuild the synthetic ones: `python3 tests/fixtures/make_synthetic.py`.
+
+## Measuring the budgets (§15)
+
+With the deck visible:
+
+```
+tools/measure-budget.py 60
+```
+
+prints redraws per second, render time, JS per frame and the helpers' CPU, measured
+where each happens rather than by sampling the whole shell — that doesn't work (D-28).
+Memory: compare omarchy-shell's Pss (`/proc/<pid>/smaps_rollup`) with the plugin
+disabled and enabled, each after a fresh `omarchy-restart-shell`.
 
 ## Manual checklist
 
@@ -87,8 +111,21 @@ Run at the end of each phase. Items marked *(from Phase n)* don't apply earlier.
       scripted.)
 - [ ] Launch an app while the main monitor is focused and while it isn't
       *(from Phase 3)*.
-- [ ] Widgets agree with `btop` / `nvidia-smi` under load: CPU within 5 %,
-      temperatures within 2 °C *(from Phase 2)*.
+- [ ] Widgets agree with `btop` / `nvidia-smi`, idle and under load: CPU within
+      5 points, temperatures within 2 °C *(from Phase 2)*. CPU load:
+      `for i in $(seq 12); do timeout 15 bash -c 'while :; do :; done' & done`.
+      GPU load needs a game or benchmark — nothing is installed that makes one;
+      compare against `nvidia-smi dmon` (D-33).
+
+### Sensors *(from Phase 2)*
+- [ ] `kill -9` the collector (`status` has its pid): it's back within ~1 s, and
+      the deck doesn't even go stale. Same for nvidia-smi.
+- [ ] `kill -STOP` the collector: widgets dim with "△ N s ago" after 3 s, the
+      watchdog kills it at ~5 s, and a new one takes over. Then `kill -9` the
+      frozen pid if it's somehow still there (it shouldn't be).
+- [ ] `omarchy-shell shell hide shannon.touchdeck`, then
+      `pgrep -f touchdeck-collect` and `pgrep -f query-gpu`: nothing. Summon: both back.
+- [ ] A layout with no CPU/GPU/Memory widget runs no helpers at all.
 
 ## Simulating hotplug
 

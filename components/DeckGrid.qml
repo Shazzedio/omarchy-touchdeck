@@ -1,12 +1,14 @@
-// Lays items out on the deck's grid. Geometry and collision live in
-// lib/grid.mjs (pure, fuzz-tested); this file only turns the result into
-// positioned delegates.
+// Lays items out on the deck's grid and mounts a widget in each. Geometry and
+// collision live in lib/grid.mjs (pure, fuzz-tested); which component draws
+// which type lives in lib/widgets.mjs. This file only turns those into
+// positioned, loaded delegates.
 //
 // The grid is fitted to the window's actual logical size, never to the display
 // mode -- on this hardware those differ (1536x838 logical for a 1920x1080
 // panel at scale 1.25, less the bar). See DECISIONS.md G-3.
 import QtQuick
 import "../lib/grid.mjs" as GridLib
+import "../lib/widgets.mjs" as Widgets
 
 Item {
   id: root
@@ -16,17 +18,14 @@ Item {
   property int columns: 16
   property int rows: 9
   property bool editing: false
+  // Handed to every widget: { sensors, ... }. Widgets bind to services;
+  // they never spawn processes or read files themselves (DESIGN.md 4).
+  property var services: ({})
+  // Base URL that lib/widgets.mjs sources are relative to: the plugin root.
+  property string widgetBase: ""
 
-  // URL of the component used to draw each item. A URL rather than a Component
-  // because Loader.setSource can hand over `theme` and `entry` *before* the
-  // instance's bindings first evaluate; with sourceComponent the only hook is
-  // onLoaded, which runs a frame too late and every tile spends its first frame
-  // dereferencing a null theme. Phase 1 passes a placeholder; the widget
-  // registry takes over from Phase 2.
-  property url delegateSource
-
-  readonly property int gap: theme.spacing.gridGap
-  readonly property int margin: theme.spacing.gridMargin
+  readonly property int gap: root.theme.spacing.gridGap
+  readonly property int margin: root.theme.spacing.gridMargin
 
   readonly property var geometry: GridLib.geometry(
     root.width, root.height, root.columns, root.rows, root.margin, root.gap)
@@ -87,37 +86,50 @@ Item {
       id: tile
       required property var modelData
       readonly property var rect: root.rectFor(modelData)
+      property bool failed: false
 
       x: rect.x
       y: rect.y
       width: rect.width
       height: rect.height
 
-      // A widget that fails to load shows as a gap rather than taking the grid
-      // and every other widget down with it (DESIGN.md 15).
+      // A widget that fails to load becomes an error tile: the grid and every
+      // other widget keep working (DESIGN.md 15).
       onStatusChanged: {
-        if (status === Loader.Error)
-          console.warn("touchdeck: item " + modelData.id + " failed to load: "
-            + (sourceComponent ? sourceComponent.errorString() : ""))
+        if (status !== Loader.Error || tile.failed) return
+        tile.failed = true
+        console.warn("touchdeck: widget " + modelData.id + " (" + modelData.type + ") failed to load")
+        setSource(root.widgetBase + Widgets.ERROR_SOURCE, {
+          theme: root.theme,
+          entry: modelData,
+          services: root.services,
+          message: "Couldn't load this " + Widgets.specFor(modelData.type).displayName.toLowerCase() + " widget",
+        })
       }
 
       onLoaded: {
-        // `theme` and `entry` were set at construction; these two change over
-        // the tile's life, so they are bound rather than assigned.
+        // theme, entry and services are set at construction (setSource) so a
+        // widget's first binding pass already has them. These two change over
+        // its life, so they are bound.
         item.editing = Qt.binding(function () { return root.editing })
         item.cellSize = Qt.binding(function () { return root.cellSize })
       }
 
       function mount() {
-        if (String(root.delegateSource) === "") return
-        setSource(root.delegateSource, { theme: root.theme, entry: modelData })
+        if (root.widgetBase === "") return
+        tile.failed = false
+        setSource(root.widgetBase + Widgets.specFor(modelData.type).source, {
+          theme: root.theme,
+          entry: modelData,
+          services: root.services,
+        })
       }
 
       Component.onCompleted: mount()
 
       Connections {
         target: root
-        function onDelegateSourceChanged() { tile.mount() }
+        function onWidgetBaseChanged() { tile.mount() }
       }
     }
   }

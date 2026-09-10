@@ -4,7 +4,8 @@
 // those were broken: which item this is, how big the grid thinks it is, and
 // what the current theme's status colours look like side by side.
 //
-// Replaced by the widget registry in Phase 2.
+// Still used for widget types not built yet (volume, media and app until
+// Phase 3) and for unknown types from a newer config.
 import QtQuick
 
 Item {
@@ -12,6 +13,7 @@ Item {
 
   property var theme: null
   property var entry: null
+  property var services: null
   property bool editing: false
   property real cellSize: 0
 

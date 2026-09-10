@@ -470,3 +470,213 @@ don't belong in an installed plugin.
 only after `tools/check.sh` exits 0.
 
 **Consequence.** What runs is exactly what passed the gate.
+
+---
+
+## Calls made in Phase 2
+
+### D-19 The widget registry is a pure module, not a QML file
+
+**Context.** §7 puts the registry in `widgets/WidgetRegistry.qml`. It holds sizes,
+defaults and the settings schema that Phase 4's editor and settings sheets are
+generated from — exactly the rules that most need tests.
+
+**Decision.** `lib/widgets.mjs`: type → `{ displayName, source, minSize,
+defaultSize, maxSize, defaultSettings, settingsSchema }`, plus `specFor`,
+`clampSize` and `settingsFor`. `DeckGrid` resolves `source` against the plugin
+root and mounts it. Phase 3's types are registered now and point at the
+placeholder until they're built.
+
+**Consequence.** `tests/widgets.test.mjs` checks every spec is coherent, every
+source exists on disk, the registry and `config.mjs` agree on the type list, and the
+default layout respects every size limit.
+
+### D-20 Status is shape-coded as well as coloured
+
+**Context.** D-14 found four themes where critical can't be told from normal by
+colour. Colour alone also fails colour-blind users on *every* theme.
+
+**Decision.** Temperatures carry a glyph: none when ok, `△` at warn, `▲` at critical,
+and critical is bold. Colour reinforces the shape rather than carrying the
+meaning. The same `△` marks a stale widget's age.
+
+**Consequence.** `criticalDistinct` / `warnDistinct` stay available for widgets that
+have no room for a glyph; the readouts built so far don't need them.
+
+### D-21 lib/ is checked in Qt's QML engine, not just linted
+
+**Context.** D-10's lint step catches syntax the QML engine rejects, not a library
+method it lacks — that parses fine and fails at runtime, inside the shell.
+`padStart` (ES2017) had already crept into `theme.mjs`.
+
+**Decision.** `tests/parity.test.mjs` runs one deterministic scenario through
+`lib/` — all three fixture sysroots, formatters, theme maths, config errors, grid
+geometry — in Node and in a headless `qs`, and requires identical results (to nine
+significant digits, since `Math.pow` may round differently). Quickshell resolves
+imports that escape a config's root to `qrc:/qs-blackhole`, so each run builds a
+throwaway config root containing copies of `lib/` and the scenario. Skipped when
+there's no `qs` or no Wayland session.
+
+**Consequence.** Runs in ~150 ms and passes. `padStart` was replaced anyway.
+
+### D-22 Collector frame format: millisecond timestamps, driver on @drm
+
+**Context.** Appendix A's example shows a nanosecond timestamp and `@drm <pci>
+<vendor>`.
+
+**Decision.** `@frame <unix-ms>` (from `$EPOCHREALTIME`, locale-proof), and
+`@drm <pci> <vendor> <driver>`. The PCI address comes from the device's `uevent`
+(`PCI_SLOT_NAME`), so no `readlink` fork is needed to resolve the symlink. The
+collector never forks in its loop: file reads use `read`, the sleep is `read -t` on
+an unwritten pipe, each frame is written in one `printf`, and pacing is against a
+deadline so frames arrive on a steady clock.
+
+**Consequence.** Measured on this machine: 100 frames cost 0.18 s of CPU, about
+1.8 ms per frame — roughly 0.2 % of a core at the default 1 s interval.
+
+### D-23 CPU temperature: Tdie over Tctl on Ryzen
+
+**Context.** Appendix A says k10temp → "Tctl" (or "Tccd*"). On Ryzens that expose
+both, Tctl carries an offset of up to 20 °C for fan control and Tdie is the real die
+temperature.
+
+**Decision.** Prefer `Tdie`, then `Tctl`, then the hottest `Tccd`. coretemp uses the
+hottest `Package id N`, then the hottest `Core N`. Readings outside −40…150 °C are
+treated as glitches.
+
+### D-24 GPU junction temperature warns 15 °C above the edge thresholds
+
+**Context.** AMD cards report junction (hotspot) as well as edge. Junction runs well
+above edge in normal use; using the edge thresholds would put it permanently in the
+warning band.
+
+**Decision.** The junction readout warns and goes critical 15 °C above the widget's
+`tempWarn` / `tempCrit` (95 / 105 °C at the defaults, under amdgpu's usual 110 °C
+junction limit). No separate setting for v1.
+
+### D-25 The sensor helpers run only when something needs them
+
+**Decision.** `SensorsService.active` is the deck's `active` (visible, display
+present, not locked) **and** at least one CPU, GPU or Memory widget on the page.
+`nvidia-smi` additionally needs an NVIDIA card in the collector's drm list. Stopping
+resets the model, so the deck never shows last session's numbers as "stale" on the
+way back. Helper exits are observed through `running`, and stops *we* initiate set a
+flag so they aren't mistaken for crashes; a helper that is silent for five intervals
+(a hung driver can block a sysfs read) is killed and restarted with the §15 backoff.
+
+**Consequence.** A deck of only app keys runs no helper processes at all.
+
+### D-26 "nvidia-smi not installed" is a marker line, not an exit code
+
+**Context.** The widget should say exactly why there's no GPU data. Reading the exit
+code needs the `exited` signal's parameters, one of which is a `QProcess` enum
+qmllint can't resolve.
+
+**Decision.** nvidia-smi is started through `bash -c 'command -v nvidia-smi || { echo
+@touchdeck:nvidia-smi-missing; exit 127; }; exec nvidia-smi "$@"'`. The marker line
+sets the "missing" state; `exec` means the long-running process is nvidia-smi itself.
+
+### D-27 Gauges use Qt's curve renderer
+
+**Decision.** `ArcGauge` and `Sparkline` use `Shape.CurveRenderer` (Qt 6.11), not a
+4× multisampled layer, which would cost an offscreen texture per widget against §15's
+memory budget.
+
+### D-28 The CPU budget is measured per part, not by sampling the shell
+
+**Context.** §15's CPU budget is 1 % of one core for the collector, nvidia-smi and
+the QML together. The obvious measurement — omarchy-shell's CPU with the deck
+visible minus hidden — is useless here: the shell runs Qt's *basic* render loop
+(there is no per-window render thread), so the deck shares one GUI thread with the
+bar and every other plugin, and three identical 30 s rounds gave the deck +0.13 %,
++3.0 % and +2.8 %. Only the hidden baseline was stable. A standalone Quickshell
+instance hosting just the deck would isolate it, but in Quickshell's config-root
+mode `import "services"` failed with "SensorsService is not a type" (the plugin
+itself, loaded by URL inside omarchy-shell, is unaffected; see D-32).
+
+**Decision.** Measure each part where it happens, and keep the probe permanently:
+
+- **render** — `Deck.qml` counts frames on its own window (`beforeSynchronizing` →
+  `frameSwapped`) and reports `render: { frames, busyMs, at }` in `status`
+- **JS** — `SensorsService.frameCostMs`, the rolling cost of applying a frame
+  including the bindings it re-evaluates
+- **helpers** — CPU time of the collector and nvidia-smi from `/proc`
+
+`tools/measure-budget.py` samples all three.
+
+**Result** (60 s windows, default layout, this machine):
+
+| | redraws | per redraw | render | JS | helpers | **total** |
+|---|---|---|---|---|---|---|
+| easing on (threshold 8) | 5.7 /s | 0.12 ms | 0.07 % | 0.02 % | 0.47 % | **0.55 %** |
+| reduceMotion | 2.0 /s | 0.17 ms | 0.03 % | 0.02 % | 0.82 % | **0.87 %** |
+
+Within budget either way. The helpers dominate and nvidia-smi is the variable one
+(0.3–0.6 % across runs); the collector is a steady ~0.2 %. JS per frame inside Qt's
+engine, benchmarked separately over 2 000 frames: 0.13 ms on this machine's real
+fixture, 0.25 ms on the 32-thread one (budget 2 ms).
+
+**Consequence.** Honest limits: the probe times sync, render and swap, not polish
+(text layout) or Wayland event handling, both small. The whole-shell A/B means
+sat above the probe's figure but inside that method's noise, so they can neither
+confirm nor refute it. Memory, measured the only way that isolates it (shell Pss
+with the plugin disabled vs enabled, fresh restarts): 736.0 MB vs 735.7 MB — the
+deck is lost in the noise, far under 60 MB.
+
+### D-29 Easing only for changes of 8 points or more
+
+**Context.** §9 asks for 250 ms value easing. With once-a-second sensor data every
+small wobble eased, keeping the deck redrawing at 60 fps for a quarter of every
+second. D-28 later showed each redraw costs ~0.1 ms, so this was never the CPU
+problem it first looked like — but it is still 15 redraws for a change nobody can see.
+
+**Decision.** `EasedValue` eases a change only when it is at least
+`DeckTheme.easeThreshold` (8) points; smaller ones land. `reduceMotion` turns all
+easing off.
+
+### D-30 One update per interval
+
+**Decision.** nvidia-smi lines are held and folded into the next collector frame, so
+both sources land in one update. The always-on 1 s clock is gone: a single-shot
+`staleTimer` is pushed back by every frame and only fires when a frame is overdue,
+then ticks each interval (updating the stale state, "N s ago", held GPU lines and
+the watchdog) until frames return. A hidden label no longer changes every second.
+
+**Consequence.** GPU readings lag by up to one interval. If the collector stops,
+held nvidia-smi lines are applied on the stale timer, so the GPU widget keeps moving.
+
+### D-31 The watchdog uses SIGKILL
+
+**Context.** Stopping a Quickshell `Process` sends SIGTERM. A frozen collector
+(simulated with SIGSTOP) never acted on it: same PID, still "running", for as long as
+the test ran (11 s).
+
+**Decision.** `Process.signal(9)`. Verified: stale at 3.5 s, killed at 5 s, a new
+PID at 6 s, fresh again; the frozen process is gone. A process in uninterruptible
+sleep (a truly hung sysfs read) can't be killed by anything until the read returns;
+the deck then shows stale, which is the truth.
+
+### D-32 Known limitation: the deck doesn't load as a standalone Quickshell config
+
+**Context.** Found while trying to isolate CPU (D-28). Copied into a fresh Quickshell
+config root with Omarchy's `Commons` and `Ui` beside it, `Deck.qml`'s
+`SensorsService { }` failed with "is not a type"; `ConfigStore` from the same
+directory loaded fine. Inside omarchy-shell, where the plugin is loaded by file URL,
+everything loads.
+
+**Decision.** Not pursued: it doesn't affect the plugin as shipped. It *would*
+matter for Appendix B's standalone fallback host, so it's recorded here for whoever
+reaches for that.
+
+### D-33 GPU utilisation can't be checked under load on this machine
+
+**Context.** §17 asks for values within tolerance of nvidia-smi idle and under load.
+No GPU load generator is installed (`vkcube`, `glmark2`, `vkmark`, `glxgears` all
+absent). GPU utilisation is also a bursty sampled counter: a one-shot nvidia-smi read
+next to the deck's stream disagreed by 20–30 points in *both* directions; over 10 s
+the means were 3.3 % (deck) vs 11.5 % (independent stream).
+
+**Decision.** The deck's nvidia-smi parsing is exact (unit-tested on real output), and
+VRAM, GPU temperature and power match a separate nvidia-smi read to the MiB, degree
+and ~1 W. The under-load GPU utilisation comparison goes on the manual checklist:
+run a game and watch the deck against `nvidia-smi dmon`.

@@ -98,7 +98,7 @@ else
   # mismatch fails here instead of on the touch display.
   while IFS= read -r file; do
     "$QMLLINT" "$file" 2>&1 | grep -E '^(Warning|Error):' >> "$LINT_OUT" || true
-  done < <(find "$REPO/lib" -name '*.mjs' | sort)
+  done < <(find "$REPO/lib" "$REPO/tests/qml" -name '*.mjs' 2>/dev/null | sort)
 
   if [[ -s "$LINT_OUT" ]]; then
     sed 's/^/    /' "$LINT_OUT"
