@@ -12,6 +12,10 @@ import * as Format from "../../lib/format.mjs"
 import * as Theme from "../../lib/theme.mjs"
 import * as Config from "../../lib/config.mjs"
 import * as Grid from "../../lib/grid.mjs"
+import * as Audio from "../../lib/audio.mjs"
+import * as Media from "../../lib/media.mjs"
+import * as Apps from "../../lib/apps.mjs"
+import * as Glyphs from "../../lib/glyphs.mjs"
 
 // Doubles may differ in the last bit between engines (Math.pow is not
 // required to be correctly rounded), so compare at 9 significant digits.
@@ -86,5 +90,41 @@ export function run(input) {
     geometry: Grid.geometry(1536, 838, 16, 9, 10, 6),
     parked: Grid.partitionByFit(Config.pageItems(Config.defaultConfig(), 0), 8, 6).unplaced.length,
   }
+  const sinks = [
+    { name: "a", nickname: "Built-in Audio", description: "Built-in Audio Analog Stereo", isSink: true },
+    { name: "b", nickname: "Built-in Audio", description: "Built-in Audio Digital Stereo (HDMI)", isSink: true },
+    { name: "c", nickname: "HECATE G2 II GAMING HEADSET", isSink: true },
+    { name: "s", isSink: true, isStream: true },
+  ]
+  out.audio = {
+    outputs: Audio.outputOptions(sinks, Audio.parseSinkAvailability("b\t0\n"), "a"),
+    drag: Audio.dragVolume(0.5, 100, 400, 1.5),
+    wheel: Audio.wheelSteps(60, 90),
+    step: Audio.stepVolume(0.1 + 0.2, 0.05, 1),
+    level: [Audio.volumeLevel(0, false), Audio.volumeLevel(0.2, false), Audio.volumeLevel(0.9, false)],
+  }
+  const players = [
+    { key: "mpv", identity: "mpv", isPlaying: false, hasTrack: true },
+    { key: "spot", identity: "Spotify", desktopEntry: "spotify", isPlaying: true, hasTrack: true },
+    { key: "ctl", dbusName: "org.mpris.MediaPlayer2.playerctld", isPlaying: true, hasTrack: true },
+  ]
+  let activity = Media.trackActivity(null, players, 1000)
+  activity = Media.trackActivity(activity, [players[0], players[2]], 2000)
+  out.media = {
+    chosen: Media.choosePlayer(players, { activity: activity }),
+    preferred: Media.choosePlayer([players[0], players[2]], { activity: activity, preferred: "mpv" }),
+    next: Media.nextPlayer(players, "mpv"),
+    activity: activity,
+    times: [Media.formatTime(187.9), Media.formatTime(3723), Media.formatTime(null)],
+  }
+  const lookup = function (id) { return id === "brave-browser" ? { name: "Brave", icon: "brave-desktop" } : null }
+  out.apps = {
+    key: Apps.describeKey({ desktopId: "brave-browser.desktop" }, lookup, true),
+    missing: Apps.describeKey({ desktopId: "gone.desktop" }, lookup, true).state,
+    args: Apps.launchArgs({ command: "xdg-terminal-exec btop", target: "workspace:4" }, { lastMonitor: "DP-1" }),
+    roles: Apps.applyDefaultRoles([{ id: "k", type: "app", settings: { defaultRole: "browser" } }],
+      Apps.parseDefaults("browser=brave-browser.desktop\n"), function (id) { return lookup(id) !== null }),
+  }
+  out.glyphs = [Glyphs.MIC, Glyphs.PLAY, Glyphs.volume("muted")].map(function (g) { return g.length })
   return stable(out)
 }
