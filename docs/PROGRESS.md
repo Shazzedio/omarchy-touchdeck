@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **Phase 3 complete (touch pass pending) — awaiting Shannon's go for Phase 4.**
+Current phase: **all five phases complete — v1.0.0.** What's next is the backlog in `DESIGN.md` §17.
 
 Phases are defined in `DESIGN.md` §17. Findings and calls go in `DECISIONS.md`;
 how to test lives in `TESTING.md`.
@@ -274,7 +274,9 @@ Shannon's touch pass after the D-43 fix: "all working".
 
 ---
 
-## Phase 4 — edit mode ✅ (touch pass pending)
+## Phase 4 — edit mode ✅
+
+Shannon's touch pass: "all tested. all good."
 
 Built:
 - **Entering**: a long-press anywhere (700 ms) or a right-click opens a bubble with
@@ -361,3 +363,35 @@ Also:
 - **Typing into the deck** (D-44). A text field can only get focus from a tap.
 - **60 fps while dragging.** Measure with `tools/measure-budget.py 20` while dragging.
 - **The week of use.**
+
+---
+
+## Phase 5 — polish and release ✅
+
+- [x] **Copy pass over empty and error states** (D-50).
+      - The unknown-widget tile was still Phase 1's debug tile. It now says what
+        happened and how to fix it.
+      - The load-error tile no longer lowercases names ("The CPU widget couldn't
+        load").
+      - Config repairs such as dropped items and duplicate ids now show on the banner
+        instead of only in the log.
+      - Verified by writing an unknown type and a duplicate id into the config:
+        banner and tile by screenshot, then the file restored byte for byte.
+- [x] **Reduce-motion** (D-49). It applies when the config asks, or when Hyprland's
+      animations are off. In the 0.6 s after a 16-point volume change the deck drew
+      9–16 frames normally and 1–3 reduced. It followed Hyprland off and back on.
+- [x] **README**: install, display matching, touch mapping, keybind and workspace
+      snippets, configuration, scripting, the escape hatch and troubleshooting.
+      MIT `LICENSE`.
+- [x] **Screenshots** in `docs/screenshots/`, from the live deck, with a muted demo
+      track so no real album art is committed (D-51).
+- [x] **Tag `v1.0.0`.** The manifest is at 1.0.0.
+- [ ] **Publishing to the Omarchy plugin marketplace** (optional). Not done. It needs
+      a public git repository, and there's no remote yet. Shannon's call.
+
+Known limits for anyone else installing it:
+- `display.match` defaults to this machine's panel ("Verbatim"). The README says to
+  set it.
+- Everything was built and measured on one machine (i5-12400F, RTX 4070,
+  Omarchy 4.0.0.alpha). The AMD paths are covered by synthetic fixtures only.
+- The backlog after v1 is in `DESIGN.md` §17.

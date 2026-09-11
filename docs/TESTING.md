@@ -148,6 +148,13 @@ Run at the end of each phase. Items marked *(from Phase n)* don't apply earlier.
 - [ ] `omarchy font set <family>`, then back: the deck follows. (It binds the same
       `monospace` alias as Omarchy's own shell; this one restarts the shell.)
 
+### Motion *(from Phase 5, D-49)*
+- [ ] `appearance.reduceMotion: true`, or Hyprland's `animations.enabled = false`
+      (followed at start and on config reload, not a live `eval`: G-19).
+      `status.motion.reduced` is true, and values jump instead of gliding.
+      Scripted: read `status.render.frames`, change the volume by 16 points, wait
+      0.6 s and read it again. Expect about 9–16 frames normally and 1–3 reduced.
+
 ### Config (§12)
 - [ ] A valid hand edit to `~/.config/touchdeck/config.json` applies live.
 - [ ] Shrink the grid in the file: items that no longer fit are parked and the banner
@@ -228,6 +235,20 @@ Run at the end of each phase. Items marked *(from Phase n)* don't apply earlier.
 - [ ] `omarchy-shell shell hide shannon.touchdeck`, then
       `pgrep -f touchdeck-collect` and `pgrep -f query-gpu`: nothing. Summon: both back.
 - [ ] A layout with no CPU/GPU/Memory widget runs no helpers at all.
+
+## README screenshots
+
+Taken from the live deck, with no real album art in the repository (D-51):
+
+1. Snapshot `config.json`.
+2. Start a silent, muted demo track:
+   `mpv --no-video --mute=yes --loop=inf --force-media-title="Night Drive" demo.ogg`.
+   Make `demo.ogg` with `ffmpeg -f lavfi -i anullsrc -t 600 demo.ogg`.
+3. `intent '{"do":"set","id":"media-1","settings":{"preferredPlayer":"mpv"}}'`.
+4. `grim -o HDMI-A-1` the deck. Then `edit`, `settings` and
+   `add-sheet ... "tab":"apps"`, one at a time.
+5. Restore the snapshot, and stop mpv.
+6. `magick in.png -strip -resize 1600x out.png` into `docs/screenshots/`.
 
 ## Simulating hotplug
 

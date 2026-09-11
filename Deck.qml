@@ -145,6 +145,7 @@ Item {
       launch: launcher.summary(),
       hypr: hypr.summary(),
       editor: editor.summary(),
+      motion: { reduced: root.reduceMotion, config: root.appearance.reduceMotion === true, hyprlandAnimations: hypr.animationsEnabled },
       unplaced: root.unplacedCount,
       render: { frames: root.renderFrames, busyMs: root.renderMs, at: Date.now() },
     })
@@ -229,6 +230,18 @@ Item {
 
   readonly property var appearance: configStore.config.appearance
   readonly property var displayConfig: configStore.config.display
+
+  // Still, when asked to be or when Hyprland's own animations are off (D-49).
+  readonly property bool reduceMotion: root.appearance.reduceMotion === true || !hypr.animationsEnabled
+
+  // Problems the last load of config.json worked around, for the banner. An
+  // unknown widget type isn't one: it keeps its place and says so on its tile.
+  readonly property var configRepairs: {
+    var out = []
+    var list = configStore.repairs || []
+    for (var i = 0; i < list.length; i++) if (String(list[i]).indexOf("unknown type") === -1) out.push(String(list[i]))
+    return out
+  }
 
   property int unplacedCount: 0
 
@@ -410,7 +423,7 @@ Item {
         columns: root.appearance.columns
         rows: root.appearance.rows
         appearanceScale: root.appearance.scale
-        reduceMotion: root.appearance.reduceMotion === true
+        reduceMotion: root.reduceMotion
       }
 
       Banner {
@@ -426,11 +439,15 @@ Item {
             return grid.unplacedItems.length + " item"
               + (grid.unplacedItems.length === 1 ? "" : "s")
               + " don't fit the grid and are parked"
+          if (root.configRepairs.length > 0)
+            return "config.json: " + root.configRepairs[0]
+              + (root.configRepairs.length > 1 ? " (and " + (root.configRepairs.length - 1) + " more)" : "")
           return ""
         }
         hint: {
           if (!configStore.healthy) return "Using the last good layout. Fix the file and it reloads."
           if (grid.unplacedItems.length > 0 && !root.editing) return "Make room for them in edit mode, or widen the grid."
+          if (root.configRepairs.length > 0) return "The deck worked around it. Fix the file, or make any edit to save a corrected copy."
           return ""
         }
       }

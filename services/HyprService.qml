@@ -5,9 +5,49 @@
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 
 QtObject {
   id: root
+
+  // Hyprland's own animations switch, which the deck follows: with Hyprland's
+  // animations off, the deck's are too (DECISIONS.md D-49). Read at start and
+  // whenever Hyprland reloads its config -- a runtime `hyprctl eval` sends no
+  // event, so that case waits for the next reload.
+  property bool animationsEnabled: true
+  property string _animText: ""
+
+  function queryAnimations() {
+    if (root._animQuery.running) return
+    root._animText = ""
+    root._animQuery.running = true
+  }
+
+  readonly property Process _animQuery: Process {
+    command: ["hyprctl", "-j", "getoption", "animations:enabled"]
+    stdout: SplitParser {
+      onRead: function (line) { root._animText += line }
+    }
+    onRunningChanged: {
+      if (running) return
+      try {
+        var option = JSON.parse(root._animText)
+        if (typeof option.bool === "boolean") root.animationsEnabled = option.bool
+        else if (typeof option.int === "number") root.animationsEnabled = option.int !== 0
+      } catch (e) {
+        // Not answered (an older Hyprland, or none): leave animations as they are.
+      }
+    }
+  }
+
+  readonly property Connections _events: Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (event.name === "configreloaded") root.queryAnimations()
+    }
+  }
+
+  Component.onCompleted: root.queryAnimations()
 
   property var deckOutputs: []
   property bool active: false
@@ -86,6 +126,7 @@ QtObject {
   function summary() {
     return { focused: root.focusedMonitor, lastMonitor: root.lastMonitor, mainMonitor: root.mainMonitor,
       restoreFocus: root.restoreFocus, restorePending: restoreTimer.running,
+      animationsEnabled: root.animationsEnabled,
       lastTouchMsAgo: root.lastTouchAt > 0 ? Date.now() - root.lastTouchAt : -1 }
   }
 }
