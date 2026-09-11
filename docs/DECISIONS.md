@@ -814,3 +814,42 @@ nothing. No silent failure either way.
 refreshed once availability arrives), not a live PipeWire model: Omarchy's audio panel
 documents that rebuilding views from PipeWire's removal signal path can crash its
 PipeWire service.
+
+### D-43 Found by Shannon: app keys opened their apps underneath the deck
+
+**What happened.** On the first real touch pass, the Brave, Files and Ghostty keys
+"didn't do anything". They did: the journal shows every tap reaching
+`uwsm-app -- gtk-launch`, and 22 windows had piled up on HDMI-A-1's workspace,
+hidden under the deck. (Spotify, started from the media widget, landed correctly
+only because it is slow to start.)
+
+**Why.** Two assumptions, both mine, both tested only by simulation:
+- the launcher moved focus to the main monitor and then put the pointer back where
+  it had been. After a tap, that is *on the deck*. Moving the pointer there made
+  Hyprland refocus the deck's output, so the app opened under the deck;
+- focus return (D-35) skipped whenever the pointer was on the deck, taking that to
+  mean a mouse user — so after a tap it never fired.
+
+The earlier "faithful touch" simulation (focus moved, pointer left on DP-1) modelled
+the case I assumed rather than the one that happens.
+
+**Decision.**
+- `bin/touchdeck-launch --deck NAME`: when the pointer is on the deck, it goes *with*
+  focus (plain dispatch, which warps it to the target) instead of being put back.
+  Elsewhere it is still put back exactly.
+- Whether to hand focus back is now decided from real touches, not pointer position: a
+  passive `PointHandler` over the whole deck window (touch only, never grabs) calls
+  `HyprService.touched()`. Focus landing on the deck within 1.5 s of a touch — in
+  either order — is handed back ~250 ms after the last touch. A mouse on the deck is
+  left alone.
+
+**Consequence.** Reproduced before the fix (pointer on the deck → window on HDMI-A-1)
+and verified after it (same setup → window on DP-1; a touch → focus back on DP-1 by
++600 ms; mouse on the deck with no touch → left alone). A mouse user who *clicks* an
+app key sees the pointer move to the main monitor with the new window — the price of
+the app not opening under the deck. The touch overlay itself can only be proven by a
+finger: `intent {"do":"touched"}` stands in for it in scripts.
+
+**Also noted.** Shannon's workspace 1 lives on HDMI-A-1, under the deck, so anything
+sent there is invisible. Appendix C's workspace rule (a dedicated workspace for the
+touch output) would stop that; it's Shannon's config to apply.

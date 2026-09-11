@@ -95,6 +95,8 @@ Item {
     case "previous": media.previous(p); return "ok: " + p.identity
     case "seek": media.seekTo(p, Number(r.seconds)); return "ok: " + p.identity
     case "launch": return launcher.launch(String(r.id || "intent"), r.settings || {}) ? "ok" : "error: nothing to launch"
+    // What the touch overlay reports, for simulating a touch from a script.
+    case "touched": hypr.touched(); return "ok"
     }
     return "error: unknown intent"
   }
@@ -372,6 +374,19 @@ Item {
         id: sheetHost
         anchors.fill: parent
         theme: theme
+      }
+
+      // Notices every touch on the deck without taking it. On top of
+      // everything so it sees a touch first, but a PointHandler only ever
+      // takes a passive grab, so the tap, drag or fader underneath still gets
+      // it exactly as before. Mouse input isn't looked at.
+      Item {
+        anchors.fill: parent
+        z: 1000
+        PointHandler {
+          acceptedDevices: PointerDevice.TouchScreen
+          onActiveChanged: if (active) hypr.touched()
+        }
       }
 
       Connections {

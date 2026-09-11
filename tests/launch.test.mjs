@@ -22,12 +22,25 @@ function run(args, env) {
 }
 
 test("focus the main monitor without moving the pointer, then launch", () => {
-  const r = run(["--monitor", "DP-1", "--desktop", "brave-browser.desktop"], { TOUCHDECK_CURSOR: "827, 1267" })
+  const r = run(["--deck", "HDMI-A-1", "--monitor", "DP-1", "--desktop", "brave-browser.desktop"],
+    { TOUCHDECK_CURSOR: "827, 1267", TOUCHDECK_MONITORS_JSON: MONITORS("DP-1") })
   assert.equal(r.status, 0, r.err)
   assert.deepEqual(r.out, [
     'run: hyprctl eval hl.dispatch(hl.dsp.focus({ monitor = "DP-1" })); hl.dispatch(hl.dsp.cursor.move({ x = 827, y = 1267 }))',
     "launch: uwsm-app -- gtk-launch brave-browser.desktop",
   ])
+})
+
+// The bug Shannon found: a tap leaves the pointer on the deck. Putting it back
+// there after focusing the main monitor made Hyprland refocus the deck, and
+// every app opened underneath it.
+test("a pointer on the deck leaves with focus, so the app can't open under the deck", () => {
+  const r = run(["--deck", "HDMI-A-1", "--monitor", "DP-1", "--desktop", "org.gnome.Nautilus"],
+    { TOUCHDECK_CURSOR: "1200, 1900", TOUCHDECK_MONITORS_JSON: MONITORS("HDMI-A-1") })
+  assert.deepEqual(r.out, [
+    'run: hyprctl dispatch hl.dsp.focus({ monitor = "DP-1" })',
+    "launch: uwsm-app -- gtk-launch org.gnome.Nautilus.desktop",
+  ], "no cursor.move back onto the deck")
 })
 
 test("a workspace target and a custom command", () => {
@@ -52,6 +65,7 @@ test("names that would break out of the Lua string are refused", () => {
     ["--workspace", "1\"; x"],
     ["--desktop", "../../evil"],
     ["--restore-focus", "a b", "--deck", "HDMI-A-1"],
+    ["--deck", "x\"y", "--monitor", "DP-1"],
     ["--monitor", "DP-1", "--workspace", "2"],
     ["--bogus"],
   ]) {
@@ -61,7 +75,7 @@ test("names that would break out of the Lua string are refused", () => {
   }
 })
 
-test("restore-focus: back to the main monitor after a touch, keeping the pointer", () => {
+test("restore-focus after a touch: back to the main monitor, pointer kept if it's elsewhere", () => {
   const r = run(["--restore-focus", "DP-1", "--deck", "HDMI-A-1"],
     { TOUCHDECK_CURSOR: "827, 1267", TOUCHDECK_MONITORS_JSON: MONITORS("HDMI-A-1") })
   assert.deepEqual(r.out, [
@@ -69,13 +83,14 @@ test("restore-focus: back to the main monitor after a touch, keeping the pointer
   ])
 })
 
-test("restore-focus leaves a mouse user on the deck alone", () => {
-  const r = run(["--restore-focus", "DP-1", "--deck", "HDMI-A-1"],
+test("restore-focus with the pointer on the deck takes the pointer along", () => {
+  const onDeck = run(["--restore-focus", "DP-1", "--deck", "HDMI-A-1"],
     { TOUCHDECK_CURSOR: "1200, 1900", TOUCHDECK_MONITORS_JSON: MONITORS("HDMI-A-1") })
-  assert.deepEqual(r.out, ["skip: the pointer is on the deck"])
+  assert.deepEqual(onDeck.out, ['run: hyprctl dispatch hl.dsp.focus({ monitor = "DP-1" })'])
   const edge = run(["--restore-focus", "DP-1", "--deck", "HDMI-A-1"],
     { TOUCHDECK_CURSOR: "2047, 2303", TOUCHDECK_MONITORS_JSON: MONITORS("HDMI-A-1") })
-  assert.deepEqual(edge.out, ["skip: the pointer is on the deck"], "the deck's last logical pixel (512+1536-1, 1440+864-1)")
+  assert.deepEqual(edge.out, ['run: hyprctl dispatch hl.dsp.focus({ monitor = "DP-1" })'],
+    "the deck's last logical pixel (512+1536-1, 1440+864-1) is on the deck")
   const past = run(["--restore-focus", "DP-1", "--deck", "HDMI-A-1"],
     { TOUCHDECK_CURSOR: "2048, 1900", TOUCHDECK_MONITORS_JSON: MONITORS("HDMI-A-1") })
   assert.match(past.out[0], /^run: hyprctl eval/, "one pixel past the deck is not on it (logical, not physical, size)")

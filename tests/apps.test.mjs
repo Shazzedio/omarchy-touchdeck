@@ -42,11 +42,11 @@ test("a key's state: app, command, missing, loading, unset", () => {
 test("launch arguments follow the key's target", () => {
   const ctx = { lastMonitor: "DP-1", deckMonitor: "HDMI-A-1" }
   assert.deepEqual(Apps.launchArgs({ desktopId: "brave-browser.desktop" }, ctx),
-    ["--monitor", "DP-1", "--desktop", "brave-browser"])
+    ["--deck", "HDMI-A-1", "--monitor", "DP-1", "--desktop", "brave-browser"])
   assert.deepEqual(Apps.launchArgs({ desktopId: "brave-browser", target: "touch" }, ctx),
-    ["--monitor", "HDMI-A-1", "--desktop", "brave-browser"])
+    ["--deck", "HDMI-A-1", "--monitor", "HDMI-A-1", "--desktop", "brave-browser"])
   assert.deepEqual(Apps.launchArgs({ command: "xdg-terminal-exec btop", target: "workspace:4" }, ctx),
-    ["--workspace", "4", "--command", "xdg-terminal-exec btop"])
+    ["--deck", "HDMI-A-1", "--workspace", "4", "--command", "xdg-terminal-exec btop"])
   assert.deepEqual(Apps.launchArgs({ desktopId: "brave-browser" }, {}), ["--desktop", "brave-browser"],
     "no known monitor yet: launch without moving focus")
   assert.equal(Apps.launchArgs({}, ctx), null)

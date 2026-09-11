@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # touchdeck-launch: move focus, and optionally launch an app, for the deck.
 #
-#   touchdeck-launch [--monitor NAME | --workspace ID] [--desktop ID | --command CMD]
+#   touchdeck-launch [--deck NAME] [--monitor NAME | --workspace ID] [--desktop ID | --command CMD]
 #   touchdeck-launch --restore-focus NAME --deck NAME
 #
-# Focus goes through `hyprctl eval` together with a cursor move back to where
-# the pointer already was. Hyprland's focus dispatcher warps the cursor to the
-# middle of the newly focused monitor and ignores `warp = false`; doing both
-# in one eval lands in a single compositor tick, so the pointer never visibly
-# moves (DECISIONS.md G-12).
+# Moving focus: Hyprland's focus dispatcher warps the pointer to the middle of
+# the newly focused monitor and ignores `warp = false` (DECISIONS.md G-12). If
+# the pointer is somewhere else, it is put straight back -- focus and pointer
+# move in one `hyprctl eval`, a single compositor tick, so it never visibly
+# moves. If the pointer is on the deck (--deck), where a tap or a click on a
+# key leaves it, it goes *with* focus: putting it back would make Hyprland
+# refocus the monitor under it, and the app would open underneath the deck
+# (DECISIONS.md D-43).
 #
 # Apps launch the way Omarchy's own launcher does (shell/services/AppLibrary.qml):
 # `uwsm-app -- gtk-launch <id>.desktop`, so they get their own systemd scope and
@@ -16,9 +19,9 @@
 # `sh -c` (DESIGN.md D8, 11). Focus is moved first and the launch follows in the
 # same script, so the app can't start before focus has moved.
 #
-# --restore-focus NAME moves focus back to NAME, but only if focus is still on
-# the deck's output and the pointer isn't there: then focus arrived by touch,
-# not because someone is using a mouse on the deck (DESIGN.md 5.6).
+# --restore-focus NAME moves focus back to NAME if it is still on the deck's
+# output. Whether to do it at all -- after a touch, never after a mouse hover --
+# is decided by the deck, which knows when it was touched (DESIGN.md 5.6).
 #
 # --dry-run prints each command instead of running it. For tests,
 # TOUCHDECK_CURSOR ("x, y") and TOUCHDECK_MONITORS_JSON (hyprctl -j monitors)
@@ -73,14 +76,6 @@ cursor() {
   [[ $CX =~ ^-?[0-9]+$ && $CY =~ ^-?[0-9]+$ ]]
 }
 
-# focus_keeping_cursor '<lua target>', e.g. 'monitor = "DP-1"'
-focus_keeping_cursor() {
-  if cursor; then
-    run hyprctl eval "hl.dispatch(hl.dsp.focus({ $1 })); hl.dispatch(hl.dsp.cursor.move({ x = $CX, y = $CY }))"
-  else
-    run hyprctl dispatch "hl.dsp.focus({ $1 })"
-  fi
-}
 
 focused_monitor() { monitors_json | jq -r '.[] | select(.focused) | .name' 2>/dev/null | head -1; }
 
@@ -94,24 +89,30 @@ pointer_on() {
   ' >/dev/null 2>&1
 }
 
+# focus_to '<lua target>', e.g. 'monitor = "DP-1"': move focus, keeping the
+# pointer where it is unless it is on the deck.
+focus_to() {
+  if cursor && ! { [[ -n $deck ]] && pointer_on "$deck"; }; then
+    run hyprctl eval "hl.dispatch(hl.dsp.focus({ $1 })); hl.dispatch(hl.dsp.cursor.move({ x = $CX, y = $CY }))"
+  else
+    run hyprctl dispatch "hl.dsp.focus({ $1 })"
+  fi
+}
+
 if [[ -n $restore ]]; then
   [[ -n $deck ]] || fail "--restore-focus needs --deck"
   if [[ $(focused_monitor) != "$deck" ]]; then
     ((dry)) && echo "skip: focus is not on the deck"
     exit 0
   fi
-  if pointer_on "$deck"; then
-    ((dry)) && echo "skip: the pointer is on the deck"
-    exit 0
-  fi
-  focus_keeping_cursor "monitor = \"$restore\""
+  focus_to "monitor = \"$restore\""
   exit 0
 fi
 
 if [[ -n $monitor ]]; then
-  focus_keeping_cursor "monitor = \"$monitor\""
+  focus_to "monitor = \"$monitor\""
 elif [[ -n $workspace ]]; then
-  focus_keeping_cursor "workspace = \"$workspace\""
+  focus_to "workspace = \"$workspace\""
 fi
 
 if [[ -n $desktop ]]; then
