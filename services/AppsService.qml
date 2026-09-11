@@ -7,6 +7,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../lib/apps.mjs" as AppsLib
+import "../lib/fuzzy.mjs" as Fuzzy
 
 QtObject {
   id: root
@@ -32,6 +33,34 @@ QtObject {
   function describe(settings) {
     root.revision
     return AppsLib.describeKey(settings, root.lookup, root.loaded)
+  }
+
+  // Apps for the picker, as plain { id, name, icon, generic }, best match first
+  // (or A–Z with no query). omarchy-shell's own matcher when it's there, so a
+  // search gives what the Omarchy launcher gives, hidden entries included;
+  // lib/fuzzy.mjs otherwise. The shell's matcher returns rows of
+  // { entry, score, key, name } with `name` lowercased, so read the entry.
+  function list(query) {
+    root.revision
+    var q = String(query || "")
+    var entries = []
+    var library = root.shell ? root.shell.appLibrary : null
+    if (library && typeof library.sortedEntries === "function") {
+      entries = library.sortedEntries(q)
+    } else {
+      var values = DesktopEntries.applications.values || []
+      var visible = []
+      for (var i = 0; i < values.length; i++) if (values[i] && !values[i].noDisplay) visible.push(values[i])
+      entries = Fuzzy.search(visible, q, function (e) { return e.name })
+    }
+    var out = []
+    for (var j = 0; j < entries.length; j++) {
+      var e = entries[j] && entries[j].entry ? entries[j].entry : entries[j]
+      out.push({ id: String(e.id || ""), name: String(e.name || e.id || ""), icon: String(e.icon || ""),
+        generic: String(e.genericName || "") })
+    }
+    if (q === "") out.sort(function (a, b) { return a.name.localeCompare(b.name) })
+    return out
   }
 
   function iconSource(icon) {

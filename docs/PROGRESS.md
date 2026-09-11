@@ -178,7 +178,7 @@ stays as cheap insurance; the measurement method is what changed (D-28).
 
 ---
 
-## Phase 3 — audio, media, app keys, launching ✅ (touch pass pending)
+## Phase 3 — audio, media, app keys, launching ✅
 
 Built:
 - **Services**: `AudioService`, `MediaService`, `AppsService`, `HyprService` and
@@ -268,10 +268,96 @@ apps opened on the touch display, *under the deck*: 22 windows had piled up ther
 - **The touch layer**: taps, fader drags, the sheet, the seek bar, the chip. No tool
   here can tap a Wayland surface. See `TESTING.md` → *Touch*.
 - **Spotify**: needs an account.
-- **Opening an uninstalled key's settings on tap**: Phase 4.
+- **Opening an uninstalled key's settings on tap**: done in Phase 4 (D-48).
+
+Shannon's touch pass after the D-43 fix: "all working".
 
 ---
 
-## Phase 4 — edit mode
+## Phase 4 — edit mode ✅ (touch pass pending)
 
-Not started.
+Built:
+- **Entering**: a long-press anywhere (700 ms) or a right-click opens a bubble with
+  "Edit layout" and the pressed item's settings. The same passive touch handler that
+  drives focus return watches for it (D-47).
+- **Edit mode**:
+  - `editor/EditOverlay.qml`: outline, drag to move, corner grip to resize, × to
+    remove, tap for settings. The ghost snaps to cells, shows the urgent colour where
+    a drop won't fit, and a bad drop snaps back.
+  - An edit bar above the grid holds a hint, the parked-items tray and Done.
+  - Edit mode exits by itself after 60 s without a touch.
+- **Sheets**: `SheetHost` now also hosts content.
+  - `editor/SettingsSheet.qml` is generated from each widget's schema: switch,
+    stepper, choices, text field, app or GPU picker.
+  - `editor/AddSheet.qml` has three tabs. Widgets does the widget picker's job, so
+    there's no separate `WidgetPicker.qml`. Then Apps and Custom command.
+  - `editor/AppPicker.qml`: search through omarchy-shell's own matcher, plus a
+    slide-along A–Z rail.
+- **Components**: `Bubble`, `Toast` (undo), `TextButton`, `TextBox`. The keyboard is
+  taken only while a text field has focus (D-44).
+- **Services and logic**:
+  - `EditorService` handles every edit, with undo.
+  - `lib/edit.mjs` is the edit rules, with a 3 000-step fuzz.
+  - `lib/settings.mjs` and `lib/fuzzy.mjs` back the settings sheet and search.
+- **A key with nothing to launch** opens its settings on tap (D-48).
+- **Album art** is fetched outside the shell by `bin/touchdeck-art` (D-46).
+- **`intent`** gained every edit operation, and the sheets and bubble, for scripts
+  (TESTING.md).
+
+`tools/check.sh` runs 163 tests.
+
+### Acceptance
+
+- [ ] **The default layout can be rebuilt entirely by touch (typing optional).**
+      *Needs a finger (G-16).* Verified underneath it:
+      - Every step through the same intents the overlay and sheets call: add each
+        widget type, add app keys, move, resize, remove, undo, change settings.
+      - Every sheet and the bubble by screenshot.
+      - Refusals: onto another tile, off the grid, below a widget's minimum, past its
+        maximum, an unknown type, a second undo.
+- [~] **A week of normal use produces no accidental layout changes.**
+      - By construction:
+        - a long-press only *offers*;
+        - outside edit mode nothing is draggable, because the overlay doesn't exist;
+        - in edit mode the widgets are disabled;
+        - a move or resize commits only on release, and only if it fits;
+        - removal is undoable;
+        - edit mode times out.
+      - The week itself is Shannon's to run.
+- [x] **`config.json` stays valid through every edit operation.**
+      - A 3 000-step fuzz of move, resize, remove, undo, add, place, settings and grid
+        resizes. Every step checks that the file parses with no repairs, ids are
+        unique, nothing overlaps, and every size is in range.
+      - Live: a scripted pass of every operation restored the original layout exactly.
+        The file on disk was valid and matched the deck.
+
+Also:
+- **Budget at rest, Spotify playing**: **0.87 %** of a core (render 0.40 %, JS 0.03 %,
+  helpers 0.43 %). Edit mode costs nothing at rest: its overlay only exists while
+  editing.
+  - A first reading of 1.67 % was taken while the machine was busy (5-minute load
+    3.3).
+  - A second came out negative: something outside this session asked the shell to
+    restart mid-measurement (20:07:44, "Exiting due to IPC request"). The tool now
+    refuses to report across a restart.
+- **Auto-exit**: still editing 62 s after a sheet opened; exited 60 s after it closed.
+
+### Found and fixed during the phase
+
+- **The shell crashed once, inside OpenSSL** (G-18). The stack came from the image
+  loader fetching the Spotify cover over https. Covers are now fetched by
+  `bin/touchdeck-art` into tmpfs and shown from there, so the deck does no TLS inside
+  the shell (D-46). No crash since.
+- **The first sheets drew as empty boxes.** An inline `Component`'s `theme: theme`
+  bound to itself (D-45). The same trap had also left the sheet host without the
+  editor, so closing a sheet couldn't give the keyboard back.
+- **The app picker listed "comfy desktop" with no icons.** Omarchy's matcher returns
+  wrapped rows with a lowercased name (G-17).
+
+### Not covered, and why
+
+- **The touch layer.** Long-press, drags, the grip, the rail and the undo toast need a
+  finger. See `TESTING.md` → *Edit mode*.
+- **Typing into the deck** (D-44). A text field can only get focus from a tap.
+- **60 fps while dragging.** Measure with `tools/measure-budget.py 20` while dragging.
+- **The week of use.**

@@ -14,7 +14,9 @@ import Quickshell
 import Quickshell.Wayland
 import "components"
 import "services"
-import "lib/config.mjs" as ConfigLib
+import "editor"
+import "lib/widgets.mjs" as Widgets
+import "lib/settings.mjs" as SettingsLib
 
 Item {
   id: root
@@ -55,8 +57,10 @@ Item {
   // the service side be verified from a script, and makes the deck scriptable
   // from keybinds (DECISIONS.md D-34). For example:
   //   omarchy-shell shell call shannon.touchdeck intent '{"do":"volume","value":0.6}'
-  //   omarchy-shell shell call shannon.touchdeck intent '{"do":"seek","player":"mpv","seconds":60}'
+  //   omarchy-shell shell call shannon.touchdeck intent '{"do":"move","id":"cpu","col":4,"row":0}'
   signal sheetRequested(string title, var options)
+  // Sheets, the bubble: things only a window can show.
+  signal uiRequested(var request)
 
   function mediaPlayer(name) {
     var want = String(name || "").toLowerCase()
@@ -97,6 +101,28 @@ Item {
     case "launch": return launcher.launch(String(r.id || "intent"), r.settings || {}) ? "ok" : "error: nothing to launch"
     // What the touch overlay reports, for simulating a touch from a script.
     case "touched": hypr.touched(); return "ok"
+    // Edit mode: the same intents the edit overlay and sheets call.
+    case "edit":
+      root.editing = r.on === undefined ? !root.editing : r.on === true
+      return root.editing ? "editing" : "idle"
+    case "items": return JSON.stringify(editor.items)
+    case "move": return editor.move(String(r.id), Number(r.col), Number(r.row)) ? "ok" : "rejected"
+    case "resize": return editor.resize(String(r.id), Number(r.w), Number(r.h)) ? "ok" : "rejected"
+    case "remove": return editor.remove(String(r.id)) ? "ok" : "error: no such item"
+    case "undo": return editor.undo() ? "ok" : "error: nothing to undo"
+    case "add":
+      if (Widgets.types().indexOf(String(r.type)) === -1) return "error: unknown type"
+      var at = r.col !== undefined && r.row !== undefined ? { col: Number(r.col), row: Number(r.row) } : null
+      var added = editor.add(String(r.type), r.settings || {}, at)
+      return added ? added.id : "error: no room"
+    case "place": return editor.placeParked(String(r.id)) ? "ok" : "error: no room"
+    case "set": return editor.updateSettings(String(r.id), r.settings || {}) ? "ok" : "error: no such item"
+    case "settings":
+    case "add-sheet":
+    case "close-sheet":
+    case "longpress":
+      root.uiRequested(r)
+      return "ok"
     }
     return "error: unknown intent"
   }
@@ -118,6 +144,7 @@ Item {
       apps: apps.summary(),
       launch: launcher.summary(),
       hypr: hypr.summary(),
+      editor: editor.summary(),
       unplaced: root.unplacedCount,
       render: { frames: root.renderFrames, busyMs: root.renderMs, at: Date.now() },
     })
@@ -162,6 +189,7 @@ Item {
       var layer = String(root.displayConfig.layer || "top")
       return (layer === "top" || layer === "overlay") && configStore.config.launch.restoreFocus !== false
     }
+    typing: editor.textInput
     launcherPath: root.localPath(Qt.resolvedUrl("bin/touchdeck-launch"))
   }
 
@@ -185,16 +213,46 @@ Item {
   readonly property MediaService media: MediaService {
     id: media
     active: root.active && root.needsMedia
+    artPath: root.localPath(Qt.resolvedUrl("bin/touchdeck-art"))
+  }
+
+  readonly property EditorService editor: EditorService {
+    id: editor
+    configStore: configStore
+    columns: root.appearance.columns
+    rows: root.appearance.rows
   }
 
   readonly property var services: ({
-    sensors: sensors, audio: audio, media: media, apps: apps, launch: launcher, hypr: hypr,
+    sensors: sensors, audio: audio, media: media, apps: apps, launch: launcher, hypr: hypr, editor: editor,
   })
 
   readonly property var appearance: configStore.config.appearance
   readonly property var displayConfig: configStore.config.display
 
   property int unplacedCount: 0
+
+  // ------------------------------------------------------------ edit mode
+  //
+  // Ends on its own after a minute without a touch (DESIGN.md 6.1) -- but not
+  // while a sheet is open, which would pull it out from under someone reading it.
+  property bool sheetOpen: false
+
+  function noteActivity() {
+    if (root.editing) editTimeout.restart()
+  }
+
+  Timer {
+    id: editTimeout
+    interval: 60000
+    running: root.editing && !root.sheetOpen
+    onTriggered: root.editing = false
+  }
+
+  Connections {
+    target: editor
+    function onActivity() { root.noteActivity() }
+  }
 
   // Render accounting for DESIGN.md 15: how many frames the deck's window has
   // drawn and the milliseconds spent drawing them, measured on the window
@@ -285,12 +343,49 @@ Item {
         if (layer === "overlay") return WlrLayer.Overlay
         return WlrLayer.Top
       }
-      // Never steal typing from the main screen. Phase 4 flips this to
-      // OnDemand only while the app picker's search field is open.
-      WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+      // Never steal typing from the main screen -- except while a text field
+      // on the deck is active, and then all of it, the way Omarchy's own search
+      // overlays take it (DESIGN.md 5.2, DECISIONS.md D-44).
+      WlrLayershell.keyboardFocus: editor.textInput ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
       // Respect other surfaces' exclusive zones (so the deck lays out below
       // the Omarchy bar) while reserving none of its own.
       exclusionMode: ExclusionMode.Normal
+
+      // For the sheet Components below. Inside an inline Component, `theme:
+      // theme` finds the new object's own `theme` property before this
+      // window's `theme` id, and binds it to itself (DECISIONS.md D-45).
+      readonly property var deckTheme: theme
+
+      // The shared services plus this window's sheets.
+      readonly property var deckServices: Object.assign({
+        overlay: sheetHost,
+        openSettings: function (id) { panel.openSettings(id) },
+      }, root.services)
+
+      function settingsTitle(item) {
+        return item.type === "app" ? "Key settings" : Widgets.specFor(item.type).displayName + " settings"
+      }
+
+      function openSettings(id) {
+        var item = editor.item(id)
+        if (item) sheetHost.show(panel.settingsTitle(item), settingsSheet, id, false)
+      }
+
+      function openAdd(col, row, tab) {
+        sheetHost.show("Add to the deck", addSheet, { col: col, row: row, tab: tab || "" }, true)
+      }
+
+      // A long-press, at a point in the window (DESIGN.md 6.1). It only
+      // offers; it never changes anything by itself.
+      function longPress(x, y) {
+        if (root.editing || sheetHost.open || bubble.shown) return
+        var p = grid.mapFromItem(touchLayer, x, y)
+        var item = grid.itemAtPoint(p.x, p.y)
+        var actions = [{ label: "Edit layout", run: function () { root.editing = true } }]
+        if (item && SettingsLib.fields(item.type).length > 0)
+          actions.push({ label: panel.settingsTitle(item), run: function () { panel.openSettings(item.id) } })
+        bubble.showAt(x, y, actions)
+      }
 
       Item {
         id: renderProbe
@@ -326,7 +421,8 @@ Item {
         text: {
           if (!configStore.healthy)
             return "config.json " + configStore.parseError
-          if (grid.unplacedItems.length > 0)
+          // In edit mode the edit bar lists them instead.
+          if (grid.unplacedItems.length > 0 && !root.editing)
             return grid.unplacedItems.length + " item"
               + (grid.unplacedItems.length === 1 ? "" : "s")
               + " don't fit the grid and are parked"
@@ -334,8 +430,60 @@ Item {
         }
         hint: {
           if (!configStore.healthy) return "Using the last good layout. Fix the file and it reloads."
-          if (grid.unplacedItems.length > 0) return "Make room for them in edit mode, or widen the grid."
+          if (grid.unplacedItems.length > 0 && !root.editing) return "Make room for them in edit mode, or widen the grid."
           return ""
+        }
+      }
+
+      // Edit mode's bar: what you can do, the parked tray, and Done. A strip
+      // of its own rather than floating over the grid, so no cell is ever
+      // hidden behind it.
+      Item {
+        id: editBar
+        anchors { top: banner.bottom; left: parent.left; right: parent.right }
+        visible: root.editing
+        height: visible ? theme.minTarget + theme.spacing.gridMargin * 2 : 0
+
+        DeckText {
+          anchors {
+            left: parent.left
+            right: parked.left
+            verticalCenter: parent.verticalCenter
+            leftMargin: theme.spacing.gridMargin
+            rightMargin: theme.spacing.xl
+          }
+          theme: theme
+          kind: "body"
+          tone: "muted"
+          text: grid.unplacedItems.length > 0
+            ? "Parked, tap to place:"
+            : "Drag to move · corner to resize · tap for settings · + to add"
+        }
+
+        Row {
+          id: parked
+          anchors { right: done.left; verticalCenter: parent.verticalCenter; rightMargin: theme.spacing.xl }
+          spacing: theme.spacing.md
+
+          Repeater {
+            model: grid.unplacedItems
+
+            TextButton {
+              required property var modelData
+              theme: theme
+              text: editor.label(modelData)
+              onClicked: editor.placeParked(modelData.id)
+            }
+          }
+        }
+
+        TextButton {
+          id: done
+          anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: theme.spacing.gridMargin }
+          theme: theme
+          selected: true
+          text: "Done"
+          onClicked: root.editing = false
         }
       }
 
@@ -343,7 +491,7 @@ Item {
         id: grid
         theme: theme
         anchors {
-          top: banner.bottom
+          top: editBar.bottom
           left: parent.left
           right: parent.right
           bottom: parent.bottom
@@ -352,11 +500,12 @@ Item {
         columns: root.appearance.columns
         rows: root.appearance.rows
         editing: root.editing
-        // The shared services plus this window's sheet host.
-        services: Object.assign({ overlay: sheetHost }, root.services)
+        services: panel.deckServices
         widgetBase: String(Qt.resolvedUrl("Deck.qml")).replace(/Deck\.qml$/, "")
 
         onUnplacedItemsChanged: root.unplacedCount = unplacedItems.length
+        onCellTapped: function (col, row) { panel.openAdd(col, row) }
+        onSettingsRequested: function (id) { panel.openSettings(id) }
       }
 
       // Shown only when the deck has nothing to draw, so an empty grid reads
@@ -364,14 +513,50 @@ Item {
       DeckText {
         theme: theme
         anchors.centerIn: grid
-        visible: grid.placedItems.length === 0 && grid.unplacedItems.length === 0
+        visible: grid.placedItems.length === 0 && grid.unplacedItems.length === 0 && !root.editing
         kind: "body"
         tone: "muted"
-        text: root.editing ? "Tap a cell to add something" : "Hold anywhere to edit"
+        text: "Hold anywhere to edit"
+      }
+
+      Component {
+        id: settingsSheet
+        SettingsSheet {
+          theme: panel.deckTheme
+          services: panel.deckServices
+          itemId: String(sheetHost.arg || "")
+          host: sheetHost
+        }
+      }
+
+      Component {
+        id: addSheet
+        AddSheet {
+          theme: panel.deckTheme
+          services: panel.deckServices
+          at: sheetHost.arg
+          host: sheetHost
+        }
       }
 
       SheetHost {
         id: sheetHost
+        anchors.fill: parent
+        theme: theme
+        // Not `editor: editor`: that id lives in the outer context, so the
+        // name would find SheetHost's own property first (D-45).
+        editor: root.editor
+        onOpenChanged: root.sheetOpen = open
+      }
+
+      Toast {
+        id: toast
+        theme: theme
+        anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: theme.spacing.xxl }
+      }
+
+      Bubble {
+        id: bubble
         anchors.fill: parent
         theme: theme
       }
@@ -379,13 +564,62 @@ Item {
       // Notices every touch on the deck without taking it. On top of
       // everything so it sees a touch first, but a PointHandler only ever
       // takes a passive grab, so the tap, drag or fader underneath still gets
-      // it exactly as before. Mouse input isn't looked at.
+      // it exactly as before.
       Item {
+        id: touchLayer
         anchors.fill: parent
         z: 1000
+
+        // A long-press is 700 ms without moving further than a tap may
+        // (DESIGN.md 10). A press that then moves was a drag -- a fader held
+        // still for a moment -- so moving also takes back a bubble it opened.
+        Timer {
+          id: hold
+          interval: 700
+          property point at
+          // This press opened the bubble.
+          property bool fired: false
+          onTriggered: {
+            hold.fired = true
+            panel.longPress(hold.at.x, hold.at.y)
+          }
+        }
+
+        function moved(point) {
+          return Math.hypot(point.position.x - point.pressPosition.x, point.position.y - point.pressPosition.y) > theme.tapSlop
+        }
+
         PointHandler {
+          id: touchPoint
           acceptedDevices: PointerDevice.TouchScreen
-          onActiveChanged: if (active) hypr.touched()
+          onActiveChanged: {
+            if (active) {
+              hypr.touched()
+              root.noteActivity()
+              hold.at = touchPoint.point.pressPosition
+              hold.fired = false
+              hold.restart()
+            } else {
+              hold.stop()
+            }
+          }
+          onPointChanged: {
+            if (!active || !touchLayer.moved(touchPoint.point)) return
+            if (hold.running) hold.stop()
+            else if (hold.fired && bubble.shown) bubble.dismiss()
+          }
+        }
+
+        PointHandler {
+          acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+          onActiveChanged: if (active) root.noteActivity()
+        }
+
+        // Right-click is the mouse's long-press (DESIGN.md 10).
+        TapHandler {
+          acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+          acceptedButtons: Qt.RightButton
+          onTapped: function (eventPoint) { panel.longPress(eventPoint.position.x, eventPoint.position.y) }
         }
       }
 
@@ -393,6 +627,28 @@ Item {
         target: root
         function onSheetRequested(title, options) {
           sheetHost.showList(title, options, function (key) { audio.selectOutput(key) }, root)
+        }
+        function onUiRequested(r) {
+          if (r.do === "settings") panel.openSettings(String(r.id))
+          else if (r.do === "add-sheet") panel.openAdd(Number(r.col) || 0, Number(r.row) || 0, String(r.tab || ""))
+          else if (r.do === "longpress") panel.longPress(Number(r.x), Number(r.y))
+          else if (r.do === "close-sheet") {
+            sheetHost.close()
+            bubble.dismiss()
+          }
+        }
+      }
+
+      Connections {
+        target: editor
+        function onToastRequested(text, actionLabel, action) { toast.show(text, actionLabel, action) }
+      }
+
+      Connections {
+        target: root
+        function onEditingChanged() {
+          bubble.dismiss()
+          if (root.editing) editTimeout.restart()
         }
       }
     }

@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Album art for the media widget, fetched outside the desktop shell.
+#
+# Spotify and browsers hand MPRIS an https URL for the cover. Loading that in a
+# QML Image does TLS inside omarchy-shell's image loader thread, and that once
+# crashed the whole shell inside OpenSSL (DECISIONS.md D-46). So the deck never
+# loads remote art itself: this fetches it to a small cache on tmpfs and prints
+# the file's path, and the widget shows the local file.
+#
+# Usage: touchdeck-art URL CACHE_DIR
+# Prints the cached file's path, or nothing (exit non-zero) if it can't be had.
+set -uo pipefail
+
+url="${1:-}"
+dir="${2:-}"
+[[ -n "$url" && -n "$dir" ]] || exit 2
+
+# Only the web. Local covers (file://) never come here; anything else is refused.
+case "$url" in
+  http://* | https://*) ;;
+  *) exit 1 ;;
+esac
+
+mkdir -p "$dir" || exit 1
+key="$(printf '%s' "$url" | sha1sum | cut -c1-40)"
+out="$dir/$key"
+
+if [[ -s "$out" ]]; then
+  touch "$out" 2>/dev/null   # most recently used, for the pruning below
+  printf '%s\n' "$out"
+  exit 0
+fi
+
+tmp="$out.$$.part"
+# Covers are a few hundred KB; refuse anything silly, and never wait long.
+if curl --fail --silent --location --max-time 15 --max-filesize 20000000 \
+  --proto '=http,https' --output "$tmp" --url "$url"; then
+  mv -f "$tmp" "$out"
+else
+  rm -f "$tmp"
+  exit 1
+fi
+
+# Keep the 30 most recently used. Names are hex digests, so ls is safe here.
+# shellcheck disable=SC2012
+ls -1t "$dir" 2>/dev/null | grep -v '\.part$' | tail -n +31 | while IFS= read -r old; do
+  rm -f -- "${dir:?}/$old"
+done
+
+printf '%s\n' "$out"

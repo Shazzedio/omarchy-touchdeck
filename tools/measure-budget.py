@@ -68,6 +68,13 @@ def main():
     last = status()
     h1 = sum(cpu_ticks(p) for p in pids)
 
+    # A shell restart in between resets the deck's counters and replaces the
+    # helpers, and the differences come out negative. Say so rather than print
+    # nonsense.
+    gone = [p for p in pids if not os.path.exists(f"/proc/{p}")]
+    if last["render"]["frames"] < first["render"]["frames"] or gone:
+        sys.exit("The shell restarted (or the helpers did) during the measurement; run it again.")
+
     wall = (last["render"]["at"] - first["render"]["at"]) / 1000
     frames = last["render"]["frames"] - first["render"]["frames"]
     busy_ms = last["render"]["busyMs"] - first["render"]["busyMs"]
