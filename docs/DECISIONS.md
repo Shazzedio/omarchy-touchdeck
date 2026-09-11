@@ -853,3 +853,110 @@ finger: `intent {"do":"touched"}` stands in for it in scripts.
 **Also noted.** Shannon's workspace 1 lives on HDMI-A-1, under the deck, so anything
 sent there is invisible. Appendix C's workspace rule (a dedicated workspace for the
 touch output) would stop that; it's Shannon's config to apply.
+
+## Phase 4 ground truth
+
+### G-17 Omarchy's app matcher returns rows, not entries
+
+`shell.appLibrary.sortedEntries(query)` (`$OMARCHY_PATH/shell/services/AppSearch.js`)
+returns `{ entry, score, key, name }` for each app, and that `name` is **lowercased**,
+for sorting. It has already dropped `noDisplay` and hidden entries. With no query it
+is in name order. The picker reads `row.entry`. The first build read the row itself
+and listed "comfy desktop" with no icon.
+
+### G-18 An https Image once crashed omarchy-shell
+
+On 2026-09-11 at 19:57, just after a shell restart, quickshell took a SIGSEGV in its
+`QQuickPixmapReader` thread. The stack runs from `QNetworkAccessManager::get` through
+`QNetworkRequest::sslConfiguration` and `QSslCertificate::fromFile` into libcrypto
+(`OSSL_DECODER_CTX_new_for_pkey`, `EVP_KEYMGMT_do_all_provided`). No other thread was
+in SSL code.
+
+- Only an Image with a remote URL goes down the image loader's network path. On the
+  deck, that is the media widget's Spotify cover (`https://i.scdn.co/…`).
+- Omarchy's own media bar widget loads covers the same way, but it isn't in
+  Shannon's bar, so the deck was the only thing in the shell loading remote images.
+- The shell restarted itself. It is the only quickshell coredump on record.
+
+## Calls made in Phase 4
+
+### D-44 Typing takes the keyboard exclusively, and only while a field has focus
+
+**Why.** DESIGN.md 5.2 asks for `OnDemand` while the search field is open. Quickshell
+0.3.1 has `None`, `Exclusive` and `OnDemand`. `OnDemand` gets the keyboard only when
+the compositor next hands it over, which is on a tap on the surface. By the time a
+field has focus, that tap has already happened, so it could take a second one.
+`Exclusive` takes the keyboard at once, as Omarchy's own search overlays do.
+
+**Decision.** `keyboardFocus` is `Exclusive` while a `TextBox` has active focus
+(`EditorService.textInput`), and `None` otherwise. HyprService's focus return is held
+off while typing. The keyboard goes back on Enter, when the sheet closes, or when the
+field goes away.
+
+**Consequence.** While a field is focused, keys can't reach the main monitor. That is
+deliberate, and brief. Only a finger can prove it (G-16).
+
+### D-45 Inside an inline Component, `name: name` binds a property to itself
+
+**Why.** The first sheets drew as empty boxes. In `Component { SettingsSheet { theme:
+theme } }`, the new object gets a context of its own. A name is looked up in that
+object's own properties before the enclosing context's ids, so `theme` found
+`SettingsSheet.theme`, which is undefined. The same line outside a Component works,
+because there the id sits in the same context (`DeckGrid { theme: theme }`).
+`SheetHost { editor: editor }` had the same trap: `editor` is an id one context up.
+qmllint doesn't flag either.
+
+**Decision.** Bindings like these go through a name that can't be shadowed:
+`panel.deckTheme`, `root.editor`. A scan of every Component found no others.
+
+### D-46 Album art is fetched out of process
+
+**Why.** G-18. The deck runs inside the desktop shell (DESIGN.md 15), so it shouldn't
+do TLS there at all.
+
+**Decision.**
+- `bin/touchdeck-art URL DIR` fetches an http(s) cover with curl into
+  `$XDG_RUNTIME_DIR/touchdeck/art/<sha1>` and prints the path. It uses `--fail`, a
+  15 s timeout, a 20 MB cap and http/https only, and keeps the 30 most recent files.
+- `MediaService.artSource(url)` returns the cached `file://` URL, or "" until the
+  file arrives; the widget shows its music glyph meanwhile. It fetches one cover at a
+  time, and remembers a failure for the session.
+- A local `file://` cover loads as it is.
+
+**Consequence.** A new cover appears a moment after the track changes, then comes
+from tmpfs. Tests cover refused schemes, a cache hit with no network, a failure that
+leaves nothing behind, and a real fetch with pruning.
+
+### D-47 How edit mode works
+
+- **Long-press.** The passive touch handler that drives focus return also watches for
+  long-presses: 700 ms, cancelled by moving more than 12 px. If the finger that opened
+  the bubble then moves, the bubble closes again: that was a fader held still before
+  a drag. The bubble offers "Edit layout" and the pressed item's settings ("Key
+  settings", "CPU settings"). Right-click does the same. Neither works while editing
+  or while a sheet is open.
+- **The edit bar** (hint, parked items, Done) is a strip above the grid rather than
+  floating over it, so no cell is ever hidden. While editing, the grid refits to the
+  shorter height, about 10 % per row.
+- **Tiles.** Widgets are disabled while editing, and an overlay takes their input:
+  - drag the tile to move it;
+  - drag the corner grip to resize it;
+  - × removes it, with a 5 s undo toast;
+  - a tap opens its settings.
+
+  The ghost is the accent colour where the item fits and the urgent colour where it
+  doesn't, and an invalid drop snaps back. A drag writes once, on release.
+- **Auto-exit** after 60 s without a touch or an edit, held while a sheet is open.
+  Verified: still editing 62 s after opening a sheet, and out 60 s after closing it.
+- **Every edit** goes `EditorService` → `lib/edit.mjs` → `ConfigStore.setPageItems`
+  (500 ms debounce, atomic write). Parked items never block an edit. Placing one takes
+  the first free spot, at its size, then its minimum size.
+- **The add sheet** has Widgets (every type but App), Apps (the picker) and Custom
+  command (an app key with `command`).
+- **Scriptable.** `intent` gained `edit`, `items`, `move`, `resize`, `remove`, `undo`,
+  `add`, `place`, `set`, `settings`, `add-sheet`, `close-sheet` and `longpress`.
+
+### D-48 A key with nothing to launch opens its settings (closes D-41)
+
+A tap on a "Not installed" or "No app set" key opens its settings sheet, where the fix
+(pick another app) is, instead of doing nothing.

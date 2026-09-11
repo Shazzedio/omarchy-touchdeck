@@ -101,7 +101,8 @@ Item {
       Image {
         id: cover
         anchors.fill: parent
-        source: root.player ? root.player.trackArtUrl : ""
+        // Through the service, which fetches remote covers out of process (D-46).
+        source: root.media && root.player ? root.media.artSource(root.player.trackArtUrl) : ""
         sourceSize: Qt.size(art.width, art.height)
         fillMode: Image.PreserveAspectCrop
         asynchronous: true

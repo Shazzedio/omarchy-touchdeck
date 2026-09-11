@@ -14,6 +14,8 @@ QtObject {
   // Give focus back after a touch. Off when the deck sits on the bottom or
   // background layer: then someone wants windows on that screen.
   property bool restoreFocus: true
+  // While someone is typing into the deck, focus is theirs to keep.
+  property bool typing: false
   property string launcherPath: ""
 
   readonly property string focusedMonitor: Hyprland.focusedMonitor ? String(Hyprland.focusedMonitor.name) : ""
@@ -52,7 +54,7 @@ QtObject {
   }
 
   function _scheduleRestore() {
-    if (root.active && root.restoreFocus && root.mainMonitor !== "") restoreTimer.restart()
+    if (root.active && root.restoreFocus && !root.typing && root.mainMonitor !== "") restoreTimer.restart()
   }
 
   onFocusedMonitorChanged: {

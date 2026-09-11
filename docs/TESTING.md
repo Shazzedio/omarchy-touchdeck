@@ -69,7 +69,23 @@ call '{"do":"sheet"}'                          # open the output sheet (tap outs
 call '{"do":"play-pause","player":"mpv"}'      # and "next", "previous"
 call '{"do":"seek","player":"chromium","seconds":90}'
 call '{"do":"launch","id":"t","settings":{"command":"foot sleep 5"}}'
+
+# Edit mode (D-47): the same calls the edit overlay and sheets make.
+call '{"do":"edit","on":true}'                 # or false; no "on" toggles
+call '{"do":"items"}'                          # page 0 as JSON
+call '{"do":"move","id":"cpu-1","col":6,"row":5}'   # "rejected" if it overlaps or leaves the grid
+call '{"do":"resize","id":"mem-1","w":2,"h":2}'     # within the widget's min/max
+call '{"do":"remove","id":"key-1"}'; call '{"do":"undo"}'   # undo only within 5 s
+call '{"do":"add","type":"cpu","col":6,"row":4}'    # prints the new id
+call '{"do":"set","id":"cpu-2","settings":{"tempWarn":70}}'   # null deletes a key
+call '{"do":"place","id":"…"}'                 # a parked item
+call '{"do":"settings","id":"key-1"}'          # open a sheet, for a screenshot
+call '{"do":"add-sheet","col":8,"row":4,"tab":"apps"}'   # tab: widgets | apps | custom
+call '{"do":"longpress","x":300,"y":380}'      # the bubble, at a point in the window
+call '{"do":"close-sheet"}'
 ```
+
+Snapshot `~/.config/touchdeck/config.json` before scripting edits, and compare after.
 
 `status` reports every service: `audio`, `media` (with the chosen player's position),
 `apps`, `launch`, `hypr`.
@@ -174,6 +190,34 @@ Run at the end of each phase. Items marked *(from Phase n)* don't apply earlier.
 - [ ] Media: play/pause, previous, next; drag the seek bar (it follows the finger, seeks
       on release); tap the player chip to cycle players. With Spotify too.
 - [ ] Touches near the deck's edges aren't swallowed by hyprgrass gestures (G-16).
+
+### Edit mode *(from Phase 4; needs a finger)*
+- [ ] Hold anywhere for ~0.7 s: a bubble offers "Edit layout", plus "Key settings" on
+      an app key. Nothing changes by itself. Tapping outside the bubble closes it and
+      doesn't launch the key underneath.
+- [ ] Hold the volume fader still, then drag: the bubble appears, then closes as the
+      finger moves. The fader follows.
+- [ ] Right-click does what a long-press does.
+- [ ] In edit mode, drag a tile: the ghost snaps to cells, turns the urgent colour over
+      another tile, and a bad drop snaps back. The corner grip resizes within limits.
+- [ ] × removes; Undo within 5 s puts it back in the same place.
+- [ ] Tap an empty cell: the add sheet opens there. Add a widget, an app (rail and
+      list, no typing), and a custom command.
+- [ ] Tap a tile: its settings. Change a stepper, a choice and a switch; the widget
+      follows at once. Pick a different app for a key.
+- [ ] Tap the search field: typing goes to the deck, not the main monitor. Tap Done or
+      Enter, and typing goes back to the main monitor.
+- [ ] A key for an uninstalled app: a tap opens its settings (D-48).
+- [ ] Leave edit mode alone for a minute: it exits by itself. With a sheet open, it
+      doesn't.
+- [ ] Rebuild the default layout from an empty page, by touch only (Phase 4 acceptance).
+- [ ] Budget while dragging: `tools/measure-budget.py 20` while dragging a tile around
+      continuously. Redraws should hold near 60/s, with render time per frame well
+      under 16 ms.
+
+### Media art *(from Phase 4, D-46)*
+- [ ] Skip a Spotify track: the new cover appears within a second or two, and
+      `ls $XDG_RUNTIME_DIR/touchdeck/art` has one more file (at most 30).
 
 ### Sensors *(from Phase 2)*
 - [ ] `kill -9` the collector (`status` has its pid): it's back within ~1 s, and

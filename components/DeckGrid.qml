@@ -9,6 +9,8 @@
 import QtQuick
 import "../lib/grid.mjs" as GridLib
 import "../lib/widgets.mjs" as Widgets
+import "../lib/edit.mjs" as EditLib
+import "../editor"
 
 Item {
   id: root
@@ -41,6 +43,21 @@ Item {
 
   function rectFor(item) {
     return GridLib.cellRect(root.geometry, item.col, item.row, item.w, item.h)
+  }
+
+  // Edit mode (DESIGN.md 6.1).
+  signal cellTapped(int col, int row)
+  signal settingsRequested(string id)
+  readonly property bool dragging: overlay.item ? overlay.item.dragging : false
+
+  // The placed item under a point in this item's coordinates, or null (a gap,
+  // the margin, or an empty cell).
+  function itemAtPoint(px, py) {
+    var cell = GridLib.cellAt(root.geometry, px, py)
+    var it = EditLib.itemAt(root.items, cell.col, cell.row, root.columns, root.rows)
+    if (!it) return null
+    var r = root.rectFor(it)
+    return px >= r.x && px < r.x + r.width && py >= r.y && py < r.y + r.height ? it : null
   }
 
   // Empty cells show a "+" only in edit mode, so the deck stays quiet at rest.
@@ -76,6 +93,13 @@ Item {
           color: root.theme.alpha(root.theme.foreground, 0.35)
         }
       }
+
+      TapHandler {
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        longPressThreshold: root.theme.tapMaxSeconds
+        dragThreshold: root.theme.tapSlop
+        onTapped: root.cellTapped(emptyCell.col, emptyCell.row)
+      }
     }
   }
 
@@ -92,6 +116,9 @@ Item {
       y: rect.y
       width: rect.width
       height: rect.height
+      // In edit mode widgets are shown but not live: a drag moves the tile,
+      // it doesn't turn the volume up (DESIGN.md 6.1).
+      enabled: !root.editing
 
       // A widget that fails to load becomes an error tile: the grid and every
       // other widget keep working (DESIGN.md 15).
@@ -131,6 +158,18 @@ Item {
         target: root
         function onWidgetBaseChanged() { tile.mount() }
       }
+    }
+  }
+
+  Loader {
+    id: overlay
+    anchors.fill: parent
+    active: root.editing
+    sourceComponent: EditOverlay {
+      theme: root.theme
+      grid: root
+      editor: root.services ? root.services.editor : null
+      onSettingsRequested: function (id) { root.settingsRequested(id) }
     }
   }
 }

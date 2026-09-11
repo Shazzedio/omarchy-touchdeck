@@ -30,7 +30,13 @@ Item {
   Timer { id: disarm; interval: 3000; onTriggered: root.armed = false }
 
   function activate() {
-    if (root.editing || !root.usable || !root.launcher) return
+    if (root.editing) return
+    // Not set up, or its app has gone: the fix is in its settings (DESIGN.md 7.1).
+    if ((root.info.state === "missing" || root.info.state === "unset") && root.services && root.services.openSettings) {
+      root.services.openSettings(root.entry.id)
+      return
+    }
+    if (!root.usable || !root.launcher) return
     if (root.settings.confirm === true && !root.armed) {
       root.armed = true
       disarm.restart()

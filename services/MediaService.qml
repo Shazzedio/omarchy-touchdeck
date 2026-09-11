@@ -3,6 +3,7 @@
 // mirrors Omarchy's own media service so the deck and the bar agree.
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Mpris
 import "../lib/media.mjs" as MediaLib
 
@@ -65,6 +66,67 @@ QtObject {
     running: root.active && root.anyPlaying
     onTriggered: {
       for (var i = 0; i < root.players.length; i++) if (root.players[i].isPlaying) root.players[i].positionChanged()
+    }
+  }
+
+  // ------------------------------------------------------------ album art
+  //
+  // Remote covers are fetched by bin/touchdeck-art, never by an Image in this
+  // process: an https Image does TLS in omarchy-shell's image loader thread,
+  // and that once crashed the whole shell (DECISIONS.md D-46). Local covers
+  // (file://) load as they are.
+
+  property string artPath: ""
+  readonly property string artDir: {
+    var runtime = String(Quickshell.env("XDG_RUNTIME_DIR") || "")
+    return runtime !== "" ? runtime + "/touchdeck/art" : ""
+  }
+
+  property var _art: ({})     // remote URL -> local file URL, or "" if it couldn't be had
+  property var _artQueue: []
+  property string _artFetching: ""
+  property string _artResult: ""
+
+  // What an Image may load for a player's trackArtUrl: the cached copy, or
+  // "" until it arrives (the widget shows its glyph meanwhile).
+  function artSource(url) {
+    var u = String(url || "")
+    if (u === "") return ""
+    if (!/^https?:\/\//i.test(u)) return u
+    var known = root._art[u]
+    if (known !== undefined) return known
+    Qt.callLater(root._requestArt, u)
+    return ""
+  }
+
+  function _requestArt(u) {
+    if (root._art[u] !== undefined || u === root._artFetching || root._artQueue.indexOf(u) !== -1) return
+    if (root.artPath === "" || root.artDir === "") return
+    root._artQueue = root._artQueue.concat([u])
+    root._nextArt()
+  }
+
+  function _nextArt() {
+    if (root._artFetcher.running || root._artQueue.length === 0) return
+    root._artFetching = root._artQueue[0]
+    root._artQueue = root._artQueue.slice(1)
+    root._artResult = ""
+    root._artFetcher.command = ["bash", root.artPath, root._artFetching, root.artDir]
+    root._artFetcher.running = true
+  }
+
+  readonly property Process _artFetcher: Process {
+    stdout: SplitParser {
+      onRead: function (line) { if (line !== "") root._artResult = line }
+    }
+    onRunningChanged: {
+      if (running) return
+      // A session's worth of tracks is small, but don't let it grow forever.
+      var next = Object.keys(root._art).length > 200 ? {} : Object.assign({}, root._art)
+      next[root._artFetching] = root._artResult !== "" ? "file://" + root._artResult : ""
+      root._art = next
+      root._artFetching = ""
+      root._nextArt()
     }
   }
 
