@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "shannon.touchdeck",
   "name": "Touchdeck",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "Shannon",
   "license": "MIT",
   "description": "Touch launchpad and system deck for a dedicated touch display.",

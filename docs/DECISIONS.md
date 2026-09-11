@@ -960,3 +960,63 @@ leaves nothing behind, and a real fetch with pruning.
 
 A tap on a "Not installed" or "No app set" key opens its settings sheet, where the fix
 (pick another app) is, instead of doing nothing.
+
+## Phase 5 ground truth
+
+### G-19 A runtime `hyprctl eval` sends no event
+
+Changing `animations.enabled` with `hyprctl eval 'hl.config({ ... })'` takes effect:
+`getoption` reads false at once. But nothing arrives on the event socket. A
+`hyprctl reload`, or a saved config file, which Hyprland reloads by itself, sends
+`configreloaded>>`. So a plugin can follow a Hyprland setting that comes from the
+config files, at start and on reload, but not one set live, short of polling.
+
+## Calls made in Phase 5
+
+### D-49 Reduce-motion also follows Hyprland's animations switch
+
+**Why.** Every animation on the deck already takes its duration from `DeckTheme`, and
+`appearance.reduceMotion` sets them all to zero. Omarchy has no motion setting of its
+own. On this desktop the system-wide one is Hyprland's `animations.enabled`.
+
+**Decision.** Motion is reduced when `appearance.reduceMotion` is true or Hyprland's
+animations are off. HyprService reads the setting with `hyprctl -j getoption` at start
+and on `configreloaded` (G-19). `status.motion` shows which source applies.
+
+**Consequence.** Measured on the deck: in the 0.6 s after a 16-point volume change it
+drew 9–16 frames normally, and 1–3 with Hyprland's animations off. Turning animations
+off with a live `eval` takes effect at the next reload or shell restart.
+
+### D-50 Copy pass over empty and error states
+
+- **Unknown widget tile.** It was still Phase 1's debug tile: type name, size, colour
+  swatches and "unknown widget". It now says "Unknown widget", then "“clock” isn't a
+  widget this Touchdeck knows. Remove it in edit mode, or update Touchdeck."
+- **Load-error tile.** "The CPU widget couldn't load"; it used to say "Couldn't load
+  this cpu widget".
+- **Config repairs** (dropped items, duplicate ids) used to be logged only. The banner
+  now names the first and counts the rest. It ranks below a parse error and parked
+  items. Unknown types are left to their own tile.
+- **Reviewed and kept:**
+  - "Hold anywhere to edit", "Waiting for data", "△ 5 s ago" and "No GPU data:
+    nvidia-smi not found";
+  - "Nothing playing" with "Open Spotify", and "No audio output";
+  - "Not installed", "No app set" and "Tap again to open";
+  - "Loading apps…" and "No apps match";
+  - the toasts.
+
+### D-51 Release: v1.0.0, and README screenshots without real covers
+
+- **The README** covers:
+  - install (`omarchy plugin add`) and display matching;
+  - touch mapping, and the keybind and workspace snippets, which are Shannon's to
+    apply;
+  - configuration and scripting;
+  - the escape hatch and troubleshooting.
+
+  The licence is MIT.
+- **Screenshots** come from the live deck, with a muted mpv demo track set as the
+  media widget's preferred player. That keeps someone else's album art out of the
+  repository. They're downscaled to 1600 px.
+- **Version.** The manifest is at 1.0.0, tagged `v1.0.0`. It isn't published to a
+  marketplace and has no git remote; that's Shannon's call.

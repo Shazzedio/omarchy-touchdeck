@@ -130,7 +130,7 @@ Item {
           theme: root.theme,
           entry: modelData,
           services: root.services,
-          message: "Couldn't load this " + Widgets.specFor(modelData.type).displayName.toLowerCase() + " widget",
+          message: "The " + Widgets.specFor(modelData.type).displayName + " widget couldn't load",
         })
       }
 
