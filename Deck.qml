@@ -50,6 +50,55 @@ Item {
     return "ok"
   }
 
+  // Scripting and test hook: drive the deck's services exactly as its widgets
+  // do. It skips the touch layer -- that still needs a finger -- but it lets
+  // the service side be verified from a script, and makes the deck scriptable
+  // from keybinds (DECISIONS.md D-34). For example:
+  //   omarchy-shell shell call shannon.touchdeck intent '{"do":"volume","value":0.6}'
+  //   omarchy-shell shell call shannon.touchdeck intent '{"do":"seek","player":"mpv","seconds":60}'
+  signal sheetRequested(string title, var options)
+
+  function mediaPlayer(name) {
+    var want = String(name || "").toLowerCase()
+    if (want !== "") {
+      for (var i = 0; i < media.players.length; i++) {
+        var q = media.players[i]
+        if (String(q.identity).toLowerCase().indexOf(want) !== -1 || String(q.desktopEntry).toLowerCase() === want) return q
+      }
+    }
+    return media.playerFor(media.choose("", ""))
+  }
+
+  function intent(json) {
+    var r
+    try { r = JSON.parse(json || "{}") || {} } catch (e) { return "error: not JSON" }
+    var p = null
+    if (["play-pause", "next", "previous", "seek"].indexOf(r.do) !== -1) {
+      p = root.mediaPlayer(r.player)
+      if (!p) return "error: no player"
+    }
+    switch (r.do) {
+    case "volume": audio.setVolume(Number(r.value), Number(r.max) > 0 ? Number(r.max) : 1); return "ok"
+    case "mute": audio.toggleMute(); return "ok"
+    case "mic": audio.toggleMic(); return "ok"
+    case "outputs": audio.refreshOutputs(); return JSON.stringify(audio.outputs)
+    case "output": return audio.selectOutput(String(r.name || "")) ? "ok" : "error: no such output"
+    case "sheet":
+      audio.refreshOutputs()
+      var options = []
+      for (var i = 0; i < audio.outputs.length; i++)
+        options.push({ key: audio.outputs[i].name, label: audio.outputs[i].label, detail: "", selected: audio.outputs[i].isDefault })
+      root.sheetRequested("Output", options)
+      return "ok"
+    case "play-pause": media.togglePlaying(p); return "ok: " + p.identity
+    case "next": media.next(p); return "ok: " + p.identity
+    case "previous": media.previous(p); return "ok: " + p.identity
+    case "seek": media.seekTo(p, Number(r.seconds)); return "ok: " + p.identity
+    case "launch": return launcher.launch(String(r.id || "intent"), r.settings || {}) ? "ok" : "error: nothing to launch"
+    }
+    return "error: unknown intent"
+  }
+
   function status() {
     return JSON.stringify({
       opened: root.opened,
@@ -62,6 +111,11 @@ Item {
       lockServiceFound: root.lockService !== null,
       config: configStore.summary(),
       sensors: sensors.summary(),
+      audio: audio.summary(),
+      media: media.summary(),
+      apps: apps.summary(),
+      launch: launcher.summary(),
+      hypr: hypr.summary(),
       unplaced: root.unplacedCount,
       render: { frames: root.renderFrames, busyMs: root.renderMs, at: Date.now() },
     })
@@ -80,15 +134,16 @@ Item {
     return decodeURIComponent(String(url).replace(/^file:\/\//, ""))
   }
 
-  // The helpers only run while something on screen needs them.
-  readonly property bool needsSensors: {
+  function layoutHas(types) {
     var items = configStore.items(0)
-    for (var i = 0; i < items.length; i++) {
-      var t = items[i].type
-      if (t === "cpu" || t === "gpu" || t === "memory") return true
-    }
+    for (var i = 0; i < items.length; i++) if (types.indexOf(items[i].type) !== -1) return true
     return false
   }
+
+  // Each service only runs while something on screen needs it.
+  readonly property bool needsSensors: root.layoutHas(["cpu", "gpu", "memory"])
+  readonly property bool needsAudio: root.layoutHas(["volume"])
+  readonly property bool needsMedia: root.layoutHas(["media"])
 
   readonly property SensorsService sensors: SensorsService {
     id: sensors
@@ -97,7 +152,42 @@ Item {
     active: root.active && root.needsSensors
   }
 
-  readonly property var services: ({ sensors: sensors })
+  readonly property HyprService hypr: HyprService {
+    id: hypr
+    deckOutputs: root.matchedNames
+    active: root.active
+    restoreFocus: {
+      var layer = String(root.displayConfig.layer || "top")
+      return (layer === "top" || layer === "overlay") && configStore.config.launch.restoreFocus !== false
+    }
+    launcherPath: root.localPath(Qt.resolvedUrl("bin/touchdeck-launch"))
+  }
+
+  readonly property LaunchService launcher: LaunchService {
+    id: launcher
+    hypr: hypr
+  }
+
+  readonly property AppsService apps: AppsService {
+    id: apps
+    shell: root.shell
+    configStore: configStore
+    defaultsPath: root.localPath(Qt.resolvedUrl("bin/touchdeck-defaults"))
+  }
+
+  readonly property AudioService audio: AudioService {
+    id: audio
+    active: root.active && root.needsAudio
+  }
+
+  readonly property MediaService media: MediaService {
+    id: media
+    active: root.active && root.needsMedia
+  }
+
+  readonly property var services: ({
+    sensors: sensors, audio: audio, media: media, apps: apps, launch: launcher, hypr: hypr,
+  })
 
   readonly property var appearance: configStore.config.appearance
   readonly property var displayConfig: configStore.config.display
@@ -260,7 +350,8 @@ Item {
         columns: root.appearance.columns
         rows: root.appearance.rows
         editing: root.editing
-        services: root.services
+        // The shared services plus this window's sheet host.
+        services: Object.assign({ overlay: sheetHost }, root.services)
         widgetBase: String(Qt.resolvedUrl("Deck.qml")).replace(/Deck\.qml$/, "")
 
         onUnplacedItemsChanged: root.unplacedCount = unplacedItems.length
@@ -275,6 +366,19 @@ Item {
         kind: "body"
         tone: "muted"
         text: root.editing ? "Tap a cell to add something" : "Hold anywhere to edit"
+      }
+
+      SheetHost {
+        id: sheetHost
+        anchors.fill: parent
+        theme: theme
+      }
+
+      Connections {
+        target: root
+        function onSheetRequested(title, options) {
+          sheetHost.showList(title, options, function (key) { audio.selectOutput(key) }, root)
+        }
       }
     }
   }

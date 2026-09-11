@@ -680,3 +680,137 @@ the means were 3.3 % (deck) vs 11.5 % (independent stream).
 VRAM, GPU temperature and power match a separate nvidia-smi read to the MiB, degree
 and ~1 W. The under-load GPU utilisation comparison goes on the manual checklist:
 run a game and watch the deck against `nvidia-smi dmon`.
+
+---
+
+## Phase 3 ground truth
+
+### G-12 Hyprland's focus dispatcher warps the pointer
+
+`hl.dsp.focus({ monitor = … })` moves the pointer to the middle of the newly focused
+monitor, and silently ignores `warp = false`. Doing the focus and a
+`hl.dsp.cursor.move` back to the old position in **one `hyprctl eval`** lands in a
+single compositor tick: focus moves, the pointer doesn't (verified: pointer stayed
+at 827,1267). The other half: moving the pointer onto a monitor refocuses it
+(follow-mouse), so a faithful "touch" in a test — focus moves, pointer stays — needs
+`cursor:no_warps` turned on for the duration (see TESTING.md).
+
+### G-13 Desktop entries load late and want bare ids
+
+`DesktopEntries.applications` is **empty** when a Quickshell instance starts and
+fills about 0.5 s later (79 entries here). `DesktopEntries.byId` wants the bare id:
+`byId("brave-browser")` works, `byId("brave-browser.desktop")` returns null. Entries
+do expose `id`. `heuristicLookup("ghostty")` returned null.
+
+### G-14 What the volume keys actually do
+
+`XF86AudioRaiseVolume` / `Lower` / `Mute` run `omarchy-audio-output-volume
+raise|lower|mute-toggle`: ±5 % on the sink `omarchy-audio-output-sink` resolves (the
+physical output behind a speaker tuning or EasyEffects), **capped at 100 %**, and
+**unmuting on every change, up or down**. Mute-toggle is debounced 250 ms. The mic key
+runs `omarchy-audio-input-mute` (wpctl on the default source, plus the OSD and a
+keyboard LED). Omarchy's audio panel switches outputs by setting
+`Pipewire.preferredDefaultAudioSink` *and* running `omarchy-audio-output-set-default`,
+which also moves playing app streams.
+
+### G-15 MPRIS position in Quickshell 0.3.1
+
+`MprisPlayer.position` is computed on read — it advanced 3.41 → 4.41 → 5.41 s with no
+signal — but bindings only re-read it when notified. Assigning `position` seeks
+(60 → 61 s a second later); `seek(offset)` works too, with a short lag. Chromium
+exposes a MediaSession as an MPRIS player named "Chromium", with the page's
+metadata; with no artwork, its art URL is Chromium's icon.
+
+### G-16 Nothing here can tap the deck for a test
+
+No virtual-pointer or touch tool is installed (`wtype` is keyboard-only, `xdotool` is
+X11-only). The touch layer is verified by a person. Also noted: the **hyprgrass**
+touch-gesture plugin is loaded in Hyprland — edge swipes near the deck's edges could
+be claimed by it before the deck sees them. On the manual checklist.
+
+## Calls made in Phase 3
+
+### D-34 An `intent` IPC hook
+
+**Decision.** `omarchy-shell shell call shannon.touchdeck intent '<json>'` runs the
+same service intents the widgets do: `volume`, `mute`, `mic`, `outputs`, `output`,
+`sheet`, `play-pause`, `next`, `previous`, `seek` (optionally by `player`), `launch`.
+
+**Consequence.** The service side of every Phase 3 acceptance item was verified from
+a script. It skips the touch layer, which still needs a finger (G-16). It also makes
+the deck scriptable from keybinds, which is why it stays.
+
+### D-35 Focus return is triggered by where focus lands, not by detecting touches
+
+**Context.** §5.6: after a touch on the deck, give focus back to the main monitor.
+Detecting "a touch" in QML means a passive handler over the whole window, and it
+would still misfire for a mouse user hovering the deck.
+
+**Decision.** `HyprService` starts a 250 ms timer whenever Hyprland's focus lands on the
+deck's output; `bin/touchdeck-launch --restore-focus` then moves focus back to the last
+other monitor **only if the pointer isn't on the deck** (a mouse user put focus there
+on purpose), and keeps the pointer exactly where it was (G-12). Off when the deck is
+on the bottom or background layer, or with `launch.restoreFocus: false`.
+
+**Consequence.** Verified with a faithful touch simulation: focus on HDMI-A-1 at
++100 ms with the return pending, back on DP-1 by +700 ms, pointer unmoved.
+
+### D-36 One launcher script for focus and launching
+
+**Decision.** `bin/touchdeck-launch` focuses (monitor or workspace, pointer kept), then
+`exec uwsm-app -- gtk-launch <id>.desktop` — Omarchy's own path — or
+`uwsm-app -- sh -c <command>`. It's started through `bash -lc 'exec "$@"'`, exactly
+Omarchy's `Util.execArgv`, so apps get the environment Omarchy's launcher gives them.
+Monitor, workspace and desktop ids are validated, not escaped, before going into Lua.
+
+**Consequence.** Focus is guaranteed to move before the app starts. A launched app
+runs in its own `app-…scope` (verified), so it outlives a shell restart (D8).
+
+### D-37 The deck's volume behaves exactly like the keys
+
+**Decision.** Volume and mute act on the resolved physical sink (G-14), and **any**
+fader movement unmutes. My first version unmuted only on the way up; the test that
+caught it left the headset muted. `maxVolume` (default 1.0) may be raised to 1.5 on
+the deck, above the keys' 100 % cap — a deliberate per-widget choice.
+
+### D-38 Media player choice
+
+**Decision.** `lib/media.mjs` mirrors Omarchy's media service ordering (playing first,
+earliest-started, preferred only while playing, playerctld last), plus: tapping the
+chip pins that player while it exists, and with nothing playing the most recently
+*stopped* player is shown. Position ticks once a second, only while something plays
+and a media widget is visible. Seeking by drag previews under the finger and sends one
+seek on release.
+
+### D-39 App icons through omarchy-shell's icon index
+
+**Decision.** `AppsService.iconSource` uses `shell.appLibrary.iconSource` when present
+— it finds icons installed after the shell started, which Qt's themed lookup misses —
+and falls back to `Quickshell.iconPath`. `shell` is part of the documented panel
+injection; `appLibrary` on it is not a documented contract, hence the fallback.
+
+### D-40 Touch sizes on this display
+
+**Context.** §10 asks for 88 px primary controls; the grid's cells are 89×85 logical
+(D-17).
+
+**Decision.** Targets are `DeckTheme.space(64)` / `space(88)`, so they scale with the
+deck. A 1×1 key is 85 logical px tall — a hair under 88 in logical terms, but 106
+physical px ≈ 17 mm, well above the 10 mm that §10's numbers exist to guarantee. Taps:
+`TapHandler` with a 0.5 s long-press threshold, 12 px drag threshold and
+release-within-bounds. Presses between 0.5 and 0.7 s do nothing; 0.7 s is kept for
+Phase 4's edit bubble.
+
+### D-41 An uninstalled app's key says so; its settings come in Phase 4
+
+§7.1 has a tap on an uninstalled app's key open its settings. Settings sheets are Phase
+4, so for now the key shows its stored name, muted, with "Not installed", and a tap does
+nothing. No silent failure either way.
+
+### D-42 Sheets live per window, and the output list is a snapshot
+
+**Decision.** Each window has a `SheetHost` above the grid, handed to widgets as
+`services.overlay`. The output list is a snapshot taken when the sheet opens (and
+refreshed once availability arrives), not a live PipeWire model: Omarchy's audio panel
+documents that rebuilding views from PipeWire's removal signal path can crash its
+PipeWire service.

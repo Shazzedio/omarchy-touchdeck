@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# touchdeck-defaults: the desktop ids of this session's default browser, file
+# manager and terminal, for the first-run app keys (DESIGN.md 6, DECISIONS.md
+# D-16). One line each; an empty value means "not found". Run once, detached.
+set -u
+printf 'browser=%s\n' "$(xdg-settings get default-web-browser 2>/dev/null)"
+printf 'files=%s\n' "$(xdg-mime query default inode/directory 2>/dev/null)"
+printf 'terminal=%s\n' "$(xdg-terminal-exec --print-id 2>/dev/null)"

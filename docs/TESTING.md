@@ -55,6 +55,47 @@ Intel + NVIDIA + AMD). See `tests/fixtures/README.md`.
   `tools/capture-fixture.sh <name>` — e.g. `intel-nvidia-radeon` once the Radeon is in.
 - Rebuild the synthetic ones: `python3 tests/fixtures/make_synthetic.py`.
 
+## Driving the deck from a script
+
+`intent` runs the same service intents the widgets call (DECISIONS.md D-34). It
+verifies the service side; the touch layer still needs a finger.
+
+```
+call() { omarchy-shell shell call shannon.touchdeck intent "$1"; }
+call '{"do":"volume","value":0.6}'           # and "mute", "mic"
+call '{"do":"outputs"}'                        # the output list as JSON
+call '{"do":"output","name":"alsa_output…"}'   # switch output
+call '{"do":"sheet"}'                          # open the output sheet (tap outside to close)
+call '{"do":"play-pause","player":"mpv"}'      # and "next", "previous"
+call '{"do":"seek","player":"chromium","seconds":90}'
+call '{"do":"launch","id":"t","settings":{"command":"foot sleep 5"}}'
+```
+
+`status` reports every service: `audio`, `media` (with the chosen player's position),
+`apps`, `launch`, `hypr`.
+
+## Simulating a touch's focus change
+
+A touch on the deck moves Hyprland's focus to its output without moving the pointer.
+`hl.dsp.focus` warps the pointer and moving the pointer refocuses a monitor, so the
+only faithful simulation is with warping briefly off (G-12). Always put it back:
+
+```
+trap 'hyprctl eval "hl.config({ cursor = { no_warps = false } })"' EXIT
+hyprctl eval 'hl.config({ cursor = { no_warps = true } })'
+hyprctl dispatch 'hl.dsp.focus({ monitor = "HDMI-A-1" })'   # the "touch"
+sleep 0.7; hyprctl -j monitors | jq -r '.[]|select(.focused)|.name'   # DP-1 again
+```
+
+## Media players for testing
+
+- mpv: `mpv --no-video --idle=yes some.wav`.
+- A Chromium tab, in a throwaway profile so nothing touches a real one: a local page
+  with an `<audio>` element and `navigator.mediaSession` metadata and `seekto` handler,
+  opened with `chromium --user-data-dir=<tmp> --no-first-run
+  --autoplay-policy=no-user-gesture-required --app=file://<page>`.
+- Spotify needs an account, so it's manual.
+
 ## Measuring the budgets (§15)
 
 With the deck visible:
@@ -116,6 +157,23 @@ Run at the end of each phase. Items marked *(from Phase n)* don't apply earlier.
       `for i in $(seq 12); do timeout 15 bash -c 'while :; do :; done' & done`.
       GPU load needs a game or benchmark — nothing is installed that makes one;
       compare against `nvidia-smi dmon` (D-33).
+
+### Touch *(from Phase 3; needs a finger — nothing installed can tap a Wayland surface)*
+- [ ] App key: pressing depresses it at once with an accent edge; releasing launches;
+      "Opening…" until the window appears. Holding past half a second doesn't launch.
+      Dragging off the key cancels.
+- [ ] Tap an app key, then type straight away: keystrokes go to the main monitor's
+      window, not into nothing (the focus return, D-35).
+- [ ] A key with "Ask before launching": the first tap says "Tap again to open".
+- [ ] A 1×1 key is comfortable to hit.
+- [ ] Volume fader: drag from anywhere on it moves the level relatively (no jump); a
+      tap on the track jumps; the mouse wheel steps. Hold the fader with one finger
+      and tap Mute with another.
+- [ ] Mute and mic buttons flip, and the volume keys / Omarchy's audio panel show it.
+- [ ] Output button opens the sheet; picking an output switches; tapping outside closes it.
+- [ ] Media: play/pause, previous, next; drag the seek bar (it follows the finger, seeks
+      on release); tap the player chip to cycle players. With Spotify too.
+- [ ] Touches near the deck's edges aren't swallowed by hyprgrass gestures (G-16).
 
 ### Sensors *(from Phase 2)*
 - [ ] `kill -9` the collector (`status` has its pid): it's back within ~1 s, and

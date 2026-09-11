@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **Phase 2 complete — awaiting Shannon's go for Phase 3.**
+Current phase: **Phase 3 complete (touch pass pending) — awaiting Shannon's go for Phase 4.**
 
 Phases are defined in `DESIGN.md` §17. Findings and calls go in `DECISIONS.md`;
 how to test lives in `TESTING.md`.
@@ -178,6 +178,80 @@ stays as cheap insurance; the measurement method is what changed (D-28).
 
 ---
 
-## Phase 3 — audio, media, app keys, launching
+## Phase 3 — audio, media, app keys, launching ✅ (touch pass pending)
+
+Built:
+- **Services**: `AudioService`, `MediaService`, `AppsService`, `HyprService` and
+  `LaunchService`.
+- **Widgets**: Volume, Media and App key.
+- **Components**: `IconButton`, `Fader`, `SeekBar`, a per-window `SheetHost` (the
+  output picker), and `EasedValue` is reused.
+- **Pure logic**: `lib/{audio,media,apps,glyphs}.mjs`.
+- **Scripts**: `bin/touchdeck-launch` (focus without warping the pointer, launch the way
+  Omarchy does, return focus after a touch) and `bin/touchdeck-defaults`.
+- **An `intent` IPC hook** that drives every service from a script (D-34).
+
+`tools/check.sh` runs 142 tests, including the QML-engine parity test, now covering
+the new modules.
+
+### Acceptance
+
+Nothing installed here can tap a Wayland surface (G-16), so each item was verified at
+the service level through the same intents the widgets call, and on screen by
+screenshot. The touch layer itself needs one pass with a finger — the list is in
+`TESTING.md` under *Touch*.
+
+- [x] **Volume and mute stay in sync with the volume keys and Omarchy's audio widget,
+      both ways; output switching works.**
+      - Keys → deck: `omarchy-audio-output-volume raise` moved PipeWire 45 → 50 %, and
+        the deck read 0.50; mute-toggle showed on the deck at once.
+      - Deck → system: the deck set 62 %, and PipeWire read 62 %; the deck's mute
+        muted it.
+      - Omarchy's audio widget binds to the same PipeWire node, which is what changed.
+        I checked PipeWire, not the widget itself.
+      - Output: switched to the HDMI monitor (the label read "MSI G272CQP") and back.
+      - Fixed on the way: a deck change that *lowered* the volume didn't unmute it,
+        unlike the keys — and the test that caught it left the headset muted (D-37).
+- [~] **Media controls work with Spotify, a Chromium tab and mpv, including seek.**
+      - mpv: play/pause toggles; seek to 60 s landed at 61.2 s.
+      - A Chromium tab (throwaway profile, MediaSession page): play/pause; seek to
+        90 s landed at 91.5 s. With both open, the deck showed whichever was playing,
+        and the chip offered to cycle.
+      - **Spotify isn't tested**: it needs an account. Manual.
+- [x] **Apps launched from the deck open on the main monitor, including when the deck
+      was the last thing touched.** With focus put on the deck's output the way a touch
+      does (pointer left on DP-1), a launch opened its window on DP-1, pointer unmoved,
+      in its own `app-…scope` (so it outlives a shell restart). The focus return on its
+      own: pending at +100 ms, back on DP-1 by +700 ms (D-35).
+- [x] **A key for an uninstalled app shows "Not installed".** Stored name, muted, "Not
+      installed"; a tap does nothing until Phase 4's settings sheet exists (D-41).
+
+Also:
+- **First-run keys**: the three default app keys resolved on first start to Brave,
+  Nautilus and Ghostty and were written back to the config (D-16).
+- **Budget**, with every Phase 3 service running: **0.83 %** of a core (render 0.13 %,
+  JS 0.01 %, helpers 0.69 %).
+- **Hidden**: sensors, audio and media all stand down.
+
+### Findings worth knowing (DECISIONS.md G-12 … G-16)
+
+- Hyprland's focus dispatcher warps the pointer and ignores `warp = false`. Focus and
+  a pointer move in one `hyprctl eval` avoid it.
+- Desktop entries arrive about 0.5 s after start, and `byId` wants the bare id.
+- The volume keys cap at 100 % and unmute on every change.
+- MPRIS position is computed on read, but bindings need a nudge.
+- The **hyprgrass** touch-gesture plugin is loaded, and could claim touches near the
+  deck's edges.
+
+### Not covered, and why
+
+- **The touch layer**: taps, fader drags, the sheet, the seek bar, the chip. No tool
+  here can tap a Wayland surface. See `TESTING.md` → *Touch*.
+- **Spotify**: needs an account.
+- **Opening an uninstalled key's settings on tap**: Phase 4.
+
+---
+
+## Phase 4 — edit mode
 
 Not started.

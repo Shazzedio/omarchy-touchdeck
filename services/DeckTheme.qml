@@ -93,6 +93,16 @@ QtObject {
     readonly property int tilePadding: root.space(10)
   }
 
+  // ------------------------------------------------------------ touch
+  //
+  // DESIGN.md 10: at least 64 px for anything touchable, 88 px for primary
+  // controls (keys, transport, mute). A tap is a release within 12 px and
+  // half a second; holding longer is kept for the edit bubble (Phase 4).
+  readonly property int minTarget: root.space(64)
+  readonly property int primaryTarget: root.space(88)
+  readonly property real tapSlop: 12
+  readonly property real tapMaxSeconds: 0.5
+
   // ------------------------------------------------------------ motion
   //
   // DESIGN.md 9: motion only ever answers input or data. reduceMotion turns
