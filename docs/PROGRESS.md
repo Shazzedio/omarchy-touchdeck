@@ -233,6 +233,26 @@ Also:
   JS 0.01 %, helpers 0.69 %).
 - **Hidden**: sensors, audio and media all stand down.
 
+### Found on Shannon's touch pass, and fixed (D-43)
+
+Shannon confirmed by finger: Spotify, volume, mute and media controls all work, and
+the CPU/GPU temperatures and RAM/VRAM readings look right. But **the app keys seemed
+to do nothing**. They were launching — every tap reached `gtk-launch` — but the
+apps opened on the touch display, *under the deck*: 22 windows had piled up there.
+
+- **Cause.** A tap leaves the pointer on the deck. The launcher focused the main
+  monitor and then put the pointer back onto the deck, which made Hyprland refocus
+  the deck's output. Focus return skipped for the same reason, taking a pointer on the
+  deck to mean a mouse user. My earlier "touch" simulation had left the pointer on
+  the main monitor, so it never showed this.
+- **Fix.** A pointer that's on the deck now leaves with focus. Focus return is driven
+  by real touches, seen by a passive touch-only handler over the whole deck.
+- **Verified.** Reproduced before the fix (window on HDMI-A-1); after it the same
+  setup opens on DP-1, and a touch hands focus back within 600 ms. The overlay
+  registered one of Shannon's real touches during testing, so it works on the hardware.
+- **Still needs a finger.** Tap Brave, Files and Ghostty. Each should open on the main
+  monitor.
+
 ### Findings worth knowing (DECISIONS.md G-12 … G-16)
 
 - Hyprland's focus dispatcher warps the pointer and ignores `warp = false`. Focus and

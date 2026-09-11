@@ -36,6 +36,25 @@ QtObject {
   // Where "the main screen" is: the monitor Shannon was last working on.
   readonly property string mainMonitor: root.lastMonitor !== "" ? root.lastMonitor : root.fallbackMonitor()
 
+  // A touch on the deck moves Hyprland's focus to its output (DECISIONS.md
+  // G-7), where new windows and keystrokes would land underneath the deck.
+  // Hand focus back ~250 ms after the last touch -- but only after a *touch*:
+  // a mouse user who moved onto the deck put focus there on purpose. The deck
+  // tells us about touches (a passive handler over its whole window, Deck.qml)
+  // rather than this guessing from the pointer, which a tap can move onto the
+  // deck too (DECISIONS.md D-43).
+  property real lastTouchAt: 0
+  readonly property int touchWindowMs: 1500
+
+  function touched() {
+    root.lastTouchAt = Date.now()
+    if (root.isDeck(root.focusedMonitor)) root._scheduleRestore()
+  }
+
+  function _scheduleRestore() {
+    if (root.active && root.restoreFocus && root.mainMonitor !== "") restoreTimer.restart()
+  }
+
   onFocusedMonitorChanged: {
     if (root.focusedMonitor === "") return
     if (!root.isDeck(root.focusedMonitor)) {
@@ -43,11 +62,9 @@ QtObject {
       restoreTimer.stop()
       return
     }
-    // A touch on the deck moves Hyprland's focus to its output (DECISIONS.md
-    // G-7), where new windows and keystrokes would land under the deck. Hand
-    // it back shortly after. The launcher does nothing if the pointer is on
-    // the deck -- a mouse user put focus there on purpose.
-    if (root.active && root.restoreFocus && root.mainMonitor !== "") restoreTimer.restart()
+    // The focus change and the touch arrive in either order; this covers
+    // focus arriving second.
+    if (Date.now() - root.lastTouchAt < root.touchWindowMs) root._scheduleRestore()
   }
 
   readonly property Timer restoreTimer: Timer {
@@ -66,6 +83,7 @@ QtObject {
 
   function summary() {
     return { focused: root.focusedMonitor, lastMonitor: root.lastMonitor, mainMonitor: root.mainMonitor,
-      restoreFocus: root.restoreFocus, restorePending: restoreTimer.running }
+      restoreFocus: root.restoreFocus, restorePending: restoreTimer.running,
+      lastTouchMsAgo: root.lastTouchAt > 0 ? Date.now() - root.lastTouchAt : -1 }
   }
 }
