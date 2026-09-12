@@ -17,6 +17,8 @@ follows your theme, font and text size exactly, and it costs under 1 % of one CP
 - **Media**: now playing for any MPRIS player (Spotify, browsers, mpv), with seek.
 - **Edit mode**: rearrange, resize, add and remove everything by touch. No typing is
   needed.
+- **Bar button**: show or hide the deck from the Omarchy bar; right click opens it
+  straight into edit mode.
 
 ## Requirements
 
@@ -33,7 +35,8 @@ omarchy plugin add <git-url> --enable
 omarchy-restart-shell
 ```
 
-The deck starts on the touch display at every login; there's no autostart line to add.
+The deck starts on the touch display at every login; there's no autostart line to add,
+and a button for it appears in the bar.
 
 Tell it which display is the touch screen. Open `~/.config/touchdeck/config.json`
 (created on first run) and set `display.match`:
@@ -90,6 +93,24 @@ hl.workspace_rule({ workspace = "10", monitor = "HDMI-A-1", default = true })
   Tap **Done**, or leave it alone for a minute, to finish. Every change is saved as
   you go.
 
+### The bar button
+
+Touchdeck also installs a widget in the Omarchy bar, so the deck can be shown and
+hidden from the main monitor:
+
+- **Left click** shows or hides the deck.
+- **Right click** opens it in edit mode.
+- The icon takes the bar's active colour while the deck is on screen, however it was
+  opened — the button, a keybind, or IPC.
+
+Move it like any other widget (`omarchy bar move shannon.touchdeck --section center`).
+Its place in the bar *is* this plugin's entry in `shell.json`, so removing the button
+from the bar switches the whole plugin off; put it back with:
+
+```sh
+omarchy plugin enable shannon.touchdeck --section right
+```
+
 ![Edit mode](docs/screenshots/edit.png)
 
 ![A key's settings](docs/screenshots/settings.png) ![Adding an app](docs/screenshots/add-app.png)
@@ -105,6 +126,35 @@ omarchy-restart-shell
 ```
 
 `omarchy plugin enable shannon.touchdeck` brings it back.
+
+## Removing it
+
+```sh
+omarchy plugin remove shannon.touchdeck --yes
+```
+
+Your layout stays at `~/.config/touchdeck/` in case you reinstall; delete that folder
+to remove every trace.
+
+## Dependencies and privileges
+
+- It runs **inside** `omarchy-shell`, as unsandboxed QML, like every shell plugin. It
+  asks for no root: no `sudo`, no polkit, no system services, no system files written.
+- **Reads**: `/proc` and `/sys` for CPU, memory and GPU readings; your desktop entries
+  for app keys.
+- **Writes**: `~/.config/touchdeck/config.json` (plus a `.bak`), and cached album art
+  under `$XDG_RUNTIME_DIR/touchdeck/`, which is memory-backed and cleared on logout.
+- **Helper processes**, each started only while something on screen needs it:
+  - `bin/touchdeck-collect` — reads `/proc` and `/sys` on a timer;
+  - `nvidia-smi` — NVIDIA readings, if installed;
+  - `bin/touchdeck-art` — `curl`s the current track's cover art from whatever URL the
+    media player publishes. This is the plugin's only network access, and it happens
+    outside the shell process on purpose (see `docs/DECISIONS.md` D-46);
+  - `bin/touchdeck-launch` — `uwsm-app` / `gtk-launch` to start apps, and `hyprctl` to
+    move focus;
+  - `bin/touchdeck-defaults` — `xdg-settings` / `xdg-mime`, once, to fill the first
+    three app keys.
+- **No telemetry**, and nothing is uploaded anywhere.
 
 ## Configuration
 

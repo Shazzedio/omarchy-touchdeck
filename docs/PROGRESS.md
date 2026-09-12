@@ -395,3 +395,24 @@ Known limits for anyone else installing it:
 - Everything was built and measured on one machine (i5-12400F, RTX 4070,
   Omarchy 4.0.0.alpha). The AMD paths are covered by synthetic fixtures only.
 - The backlog after v1 is in `DESIGN.md` §17.
+
+---
+
+## After v1.0.0 — the bar button, and marketplace readiness
+
+- [x] **A bar button to show and hide the deck** (D-52). Touchdeck now declares a
+      second kind, `bar-widget`, alongside its panel. Left click toggles the deck,
+      right click opens it in edit mode, and the icon lights while the deck is on
+      screen — including when a keybind or IPC opened it. Verified live on the bar.
+- [x] **Checked against the marketplace's requirements** (D-53,
+      `plugins.omarchy.org/develop.html`): manifest fields, kind/entry-point
+      alignment, bar-widget metadata, README (install, usage, configuration, removal,
+      dependencies, privileges), LICENSE, `preview.png`, no symlinks. A new
+      `tests/manifest.test.mjs` keeps all of it honest in the gate.
+- [x] **Found on the way** (G-20): for a bar-widget plugin, `omarchy plugin list`
+      calls "enabled" *being in the bar*, and `omarchy bar put` / `plugin enable`
+      silently do nothing while the plugin is placed anywhere else. Disable, then
+      enable with a placement.
+
+Still Shannon's call before publishing: a reverse-domain plugin id (D-6 froze
+`shannon.touchdeck`), and a public git remote to submit.
