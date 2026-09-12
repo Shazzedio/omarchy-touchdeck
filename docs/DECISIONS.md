@@ -208,7 +208,7 @@ does implement it: an `inotifywait` watcher fires `localPluginChanged`, which
 runs `reloadPlugins()` → `unloadPanels()` → `Qt.clearComponentCache()` → rescan.
 
 **What actually happens.** The reload fires reliably (the shell log shows
-`Local plugin changed, reloading: shannon.touchdeck-spike` on every save, and
+`Local plugin changed, reloading: io.github.shazzedio.touchdeck-spike` on every save, and
 every other plugin visibly re-registers), but **the plugin's QML is re-served
 from the engine's component cache**, so code changes do not take effect. A
 literal `readonly property string buildStamp` edited on disk still read as its
@@ -276,7 +276,7 @@ own output, and keeps the most recent other monitor. `LaunchService` dispatches
 **Consequence.** This mechanism is shared with the §5.6 focus-restore mitigation,
 so both come from one piece of state.
 
-### D-6 Plugin id stays `shannon.touchdeck`
+### D-6 Plugin id stays `shannon.touchdeck` *(superseded by D-54)*
 
 **Context.** §18 Q5. Shannon chose to keep the placeholder.
 
@@ -466,7 +466,7 @@ Hot reload doesn't work anyway (D-1), and the repo holds `docs/` and `.git`, whi
 don't belong in an installed plugin.
 
 **Decision.** Deploy is `rsync -a --delete --exclude .git --exclude docs` into
-`~/.config/omarchy/plugins/shannon.touchdeck/`, then `omarchy-restart-shell` — and
+`~/.config/omarchy/plugins/io.github.shazzedio.touchdeck/`, then `omarchy-restart-shell` — and
 only after `tools/check.sh` exits 0.
 
 **Consequence.** What runs is exactly what passed the gate.
@@ -732,7 +732,7 @@ be claimed by it before the deck sees them. On the manual checklist.
 
 ### D-34 An `intent` IPC hook
 
-**Decision.** `omarchy-shell shell call shannon.touchdeck intent '<json>'` runs the
+**Decision.** `omarchy-shell shell call io.github.shazzedio.touchdeck intent '<json>'` runs the
 same service intents the widgets do: `volume`, `mute`, `mic`, `outputs`, `output`,
 `sheet`, `play-pause`, `next`, `previous`, `seek` (optionally by `player`), `launch`.
 
@@ -1037,8 +1037,8 @@ So after adding the `bar-widget` kind, the deck still ran and still toggled over
 while `omarchy plugin list` called it disabled — it had a `plugins[]` entry but no bar
 entry.
 
-Worse, neither `omarchy bar put shannon.touchdeck --section right` nor
-`omarchy plugin enable shannon.touchdeck --section right` would place it: both print
+Worse, neither `omarchy bar put io.github.shazzedio.touchdeck --section right` nor
+`omarchy plugin enable io.github.shazzedio.touchdeck --section right` would place it: both print
 success, but `setEnabled` only inserts into the bar when the plugin is found nowhere
 else, and the `plugins[]` entry counts as found. `omarchy plugin disable` (which
 removed that entry) followed by `omarchy plugin enable ... --section right` placed it.
@@ -1083,6 +1083,30 @@ Against `plugins.omarchy.org/develop.html`:
   boundaries; `LICENSE`; `preview.png`; no symlinks. `tests/manifest.test.mjs` checks
   all of it in the gate, so a manifest the marketplace would reject fails here first.
 - **Shannon's call.** Publication wants a reverse-domain id such as
-  `io.github.<user>.touchdeck`; D-6 froze the id as `shannon.touchdeck`, and changing
+  `io.github.<user>.touchdeck`; D-6 froze the id as `io.github.shazzedio.touchdeck`, and changing
   it moves the plugin directory and the `shell.json` entry. Submission also needs a
   public git repository; this one has no remote yet.
+
+### D-54 The plugin id is now `io.github.shazzedio.touchdeck` (supersedes D-6)
+
+**Why.** Publishing to the Omarchy marketplace wants a reverse-domain id; a
+development-style id like `shannon.touchdeck` is only for a local clone
+(`plugins.omarchy.org/develop.html`). Shannon chose to publish, so the id changes
+with it.
+
+**Decision.** `io.github.shazzedio.touchdeck`, matching the GitHub account the
+repository lives under. The id appears in three places that matter — `manifest.json`,
+`BarWidget.qml`'s `moduleName`, and every documented command — and the rename covers
+all of them.
+
+**Migration, as D-6 predicted, is cheap.** `config.json` lives in
+`~/.config/touchdeck/` and is not keyed by plugin id, so the layout survives
+untouched:
+
+1. `omarchy plugin disable shannon.touchdeck` — takes the button out of the bar.
+2. Install to `~/.config/omarchy/plugins/io.github.shazzedio.touchdeck/`, remove the
+   old directory, restart the shell.
+3. `omarchy plugin enable io.github.shazzedio.touchdeck --section right --before omarchy.tray`.
+
+**Consequence.** Anyone who installed the old id has to do the same three steps.
+Nobody had, since this is the first publish.

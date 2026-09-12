@@ -27,7 +27,7 @@ HZ = os.sysconf("SC_CLK_TCK")
 
 
 def status():
-    out = subprocess.check_output(["omarchy-shell", "shell", "call", "shannon.touchdeck", "status", ""])
+    out = subprocess.check_output(["omarchy-shell", "shell", "call", "io.github.shazzedio.touchdeck", "status", ""])
     return json.loads(out)
 
 

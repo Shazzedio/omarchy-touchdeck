@@ -14,7 +14,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "shannon.touchdeck"
+  moduleName: "io.github.shazzedio.touchdeck"
 
   // Nerd Font "monitor" (U+F0379), the glyph Omarchy's OSD uses for a display.
   readonly property string glyph: "󰍹"

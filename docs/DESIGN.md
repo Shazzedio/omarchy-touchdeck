@@ -4,7 +4,7 @@ Design and build plan, written for Claude Code.
 
 | | |
 |---|---|
-| Working name | Touchdeck (plugin id `shannon.touchdeck`, a placeholder to rename before publishing) |
+| Working name | Touchdeck (plugin id `io.github.shazzedio.touchdeck`, a placeholder to rename before publishing) |
 | Owner | Shannon |
 | Target platform | Omarchy 4.x "Quattro", Hyprland 0.55 or newer (Lua config), Quickshell as shipped with Omarchy |
 | Display | Verbatim 14" portable touch monitor, 1920×1080 |
@@ -79,7 +79,7 @@ omarchy theme set / omarchy font set / text size change
 +--------------------------- omarchy-shell (one Quickshell process) ----------------------------+
 |  qs.Commons: Color, Style, Border          qs.Ui: BorderSurface                               |
 |        |                                                                                      |
-|  +-----+---------------------------- shannon.touchdeck ----------------------------------+    |
+|  +-----+---------------------------- io.github.shazzedio.touchdeck ----------------------------------+    |
 |  |  DeckTheme            derived tokens: touch scale, status colours                     |    |
 |  |                                                                                       |    |
 |  |  Deck.qml             panel entry point, keepLoaded                                   |    |
@@ -99,7 +99,7 @@ omarchy theme set / omarchy font set / text size change
 |  |    ConfigStore     <-> ~/.config/touchdeck/config.json                                |    |
 |  +---------------------------------------------------------------------------------------+    |
 +-----------------------------------------------------------------------------------------------+
-IPC:  omarchy-shell shell summon | hide | toggle | call  shannon.touchdeck ...
+IPC:  omarchy-shell shell summon | hide | toggle | call  io.github.shazzedio.touchdeck ...
 ```
 
 Principles:
@@ -159,7 +159,7 @@ Find out whether tapping a layer surface on the touch display moves Hyprland's f
 ### 5.7 Visibility and lifecycle
 
 - Shown automatically at login when `display.startVisible` is true (the default). Phase 0 determines whether a keepLoaded panel may open itself on load or needs a `summon` from `~/.config/hypr/autostart.lua`.
-- Toggled with a keybind (Appendix C) or `omarchy-shell shell toggle shannon.touchdeck '{}'`. A summon payload of `{"edit": true}` opens straight into edit mode.
+- Toggled with a keybind (Appendix C) or `omarchy-shell shell toggle io.github.shazzedio.touchdeck '{}'`. A summon payload of `{"edit": true}` opens straight into edit mode.
 - Paused when hidden, when no matching screen exists, and while the session is locked.
 
 ---
@@ -287,7 +287,7 @@ Verified against the Omarchy docs in September 2026; re-check against the instal
 
 ### 8.4 Fallback
 
-Only if Phase 0 proves the shell's theme push doesn't reach a third-party plugin: add a `theme-set` hook that runs `omarchy-shell shell call shannon.touchdeck reloadTheme ''`, and have `DeckTheme` read `colors.toml` and `shell.toml` directly.
+Only if Phase 0 proves the shell's theme push doesn't reach a third-party plugin: add a `theme-set` hook that runs `omarchy-shell shell call io.github.shazzedio.touchdeck reloadTheme ''`, and have `DeckTheme` read `colors.toml` and `shell.toml` directly.
 
 ### 8.5 Acceptance test
 
@@ -381,13 +381,13 @@ Example (desktop ids and the custom command are illustrative):
 The standard shell routes map to the entry point's `open(payloadJson)` and `close()`:
 
 ```
-omarchy-shell shell summon shannon.touchdeck '{}'
-omarchy-shell shell summon shannon.touchdeck '{"edit": true}'
-omarchy-shell shell hide   shannon.touchdeck
-omarchy-shell shell toggle shannon.touchdeck '{}'
+omarchy-shell shell summon io.github.shazzedio.touchdeck '{}'
+omarchy-shell shell summon io.github.shazzedio.touchdeck '{"edit": true}'
+omarchy-shell shell hide   io.github.shazzedio.touchdeck
+omarchy-shell shell toggle io.github.shazzedio.touchdeck '{}'
 ```
 
-Plugin methods via `omarchy-shell shell call shannon.touchdeck <method> <arg>`:
+Plugin methods via `omarchy-shell shell call io.github.shazzedio.touchdeck <method> <arg>`:
 
 - `toggleEdit`
 - `reloadConfig`
@@ -425,7 +425,7 @@ Starting manifest:
 ```json
 {
   "schemaVersion": 1,
-  "id": "shannon.touchdeck",
+  "id": "io.github.shazzedio.touchdeck",
   "name": "Touchdeck",
   "version": "0.1.0",
   "author": "Shannon",
@@ -437,7 +437,7 @@ Starting manifest:
 }
 ```
 
-**Development loop:** clone the repo straight into `~/.config/omarchy/plugins/shannon.touchdeck/` (or make that path a symlink to the working copy), run `omarchy-shell shell rescanPlugins`, then `omarchy plugin enable shannon.touchdeck`. Saving a file reloads plugin code, but a keepLoaded instance may only pick up changes after `omarchy-restart-shell`; find out which in Phase 0. Read logs with `qs log -p "$OMARCHY_PATH/shell" --tail 100`.
+**Development loop:** clone the repo straight into `~/.config/omarchy/plugins/io.github.shazzedio.touchdeck/` (or make that path a symlink to the working copy), run `omarchy-shell shell rescanPlugins`, then `omarchy plugin enable io.github.shazzedio.touchdeck`. Saving a file reloads plugin code, but a keepLoaded instance may only pick up changes after `omarchy-restart-shell`; find out which in Phase 0. Read logs with `qs log -p "$OMARCHY_PATH/shell" --tail 100`.
 
 ---
 
@@ -456,7 +456,7 @@ Reliability rules:
 - No synchronous I/O in QML. The collector and `nvidia-smi` run as long-running `Process`es whose stdout is parsed line by line.
 - If either helper exits, restart it with backoff (1, 2, 5, 10, then 30 seconds). Widgets show the stale state after three missed intervals.
 - A widget that throws renders an inline error tile; the grid and the other widgets keep working.
-- The deck must never stop the lock screen, notifications or the bar from working. The escape hatch is `omarchy plugin disable shannon.touchdeck` followed by `omarchy-restart-shell`; document it in the README.
+- The deck must never stop the lock screen, notifications or the bar from working. The escape hatch is `omarchy plugin disable io.github.shazzedio.touchdeck` followed by `omarchy-restart-shell`; document it in the README.
 
 ---
 
@@ -485,7 +485,7 @@ Tasks:
 
 - Record the versions and hardware facts from §2 in `docs/DECISIONS.md`.
 - Read `$OMARCHY_PATH/shell/README.md` and at least these first-party plugins: a panel that owns its own window (such as the OSD), the image selector overlay (keepLoaded), media, audio, and the launcher/menu. Write up the host contract as it actually is: which properties third-party entry points receive, how a plugin opens a layer-shell window on a chosen screen, how `call` reaches plugin methods, and how Omarchy launches apps and dispatches to Hyprland.
-- Build a minimal `shannon.touchdeck-spike` panel plugin that proves each point below.
+- Build a minimal `io.github.shazzedio.touchdeck-spike` panel plugin that proves each point below.
 
 Acceptance, with evidence for each (a log line, screenshot or command output):
 
@@ -549,7 +549,7 @@ Multiple pages with swipe; a per-app volume mixer; action keys (shell command, O
 2. Should the Omarchy bar also appear on the touch display, or only on the main monitor?
 3. Should launched apps default to the last-focused main monitor (proposed), or somewhere else?
 4. Where does the touch display sit relative to the main monitor (for the monitor rule), and is it staying in landscape?
-5. What plugin id should it use, and will it be published? (`shannon.touchdeck` is a placeholder.)
+5. What plugin id should it use, and will it be published? (`io.github.shazzedio.touchdeck` is a placeholder.)
 
 ---
 
@@ -620,8 +620,8 @@ hl.workspace_rule({ workspace = "10", monitor = "<connector>", default = true })
 hl.device({ name = "<touch-device-name>", output = "<connector>" })
 
 -- ~/.config/hypr/bindings.lua : toggle and edit shortcuts
-o.bind("SUPER + CTRL + D", "Toggle Touchdeck", "omarchy-shell shell toggle shannon.touchdeck '{}'")
-o.bind("SUPER + CTRL + SHIFT + D", "Edit Touchdeck", [[omarchy-shell shell summon shannon.touchdeck '{"edit": true}']])
+o.bind("SUPER + CTRL + D", "Toggle Touchdeck", "omarchy-shell shell toggle io.github.shazzedio.touchdeck '{}'")
+o.bind("SUPER + CTRL + SHIFT + D", "Edit Touchdeck", [[omarchy-shell shell summon io.github.shazzedio.touchdeck '{"edit": true}']])
 ```
 
 If Phase 0 shows the panel can't open itself at login, add a `summon` to `~/.config/hypr/autostart.lua` following the pattern already in that file.
