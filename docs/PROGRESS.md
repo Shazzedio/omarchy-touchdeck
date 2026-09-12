@@ -85,7 +85,7 @@ Toggle keybind, `~/.config/hypr/bindings.lua` — `SUPER + CTRL + D` is taken by
 Omarchy's Display panel (G-11), so:
 
 ```lua
-o.bind("SUPER + CTRL + SHIFT + D", "Toggle Touchdeck", "omarchy-shell shell toggle shannon.touchdeck '{}'")
+o.bind("SUPER + CTRL + SHIFT + D", "Toggle Touchdeck", "omarchy-shell shell toggle io.github.shazzedio.touchdeck '{}'")
 ```
 
 ---
@@ -415,4 +415,4 @@ Known limits for anyone else installing it:
       enable with a placement.
 
 Still Shannon's call before publishing: a reverse-domain plugin id (D-6 froze
-`shannon.touchdeck`), and a public git remote to submit.
+`io.github.shazzedio.touchdeck`), and a public git remote to submit.

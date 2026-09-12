@@ -31,7 +31,7 @@ follows your theme, font and text size exactly, and it costs under 1 % of one CP
 ## Install
 
 ```sh
-omarchy plugin add <git-url> --enable
+omarchy plugin add https://github.com/Shazzedio/omarchy-touchdeck.git --enable
 omarchy-restart-shell
 ```
 
@@ -67,7 +67,7 @@ A keybind to show and hide the deck, in `~/.config/hypr/bindings.lua`.
 (`SUPER + CTRL + D` is taken by Omarchy's display panel.)
 
 ```lua
-o.bind("SUPER + CTRL + SHIFT + D", "Toggle Touchdeck", "omarchy-shell shell toggle shannon.touchdeck '{}'")
+o.bind("SUPER + CTRL + SHIFT + D", "Toggle Touchdeck", "omarchy-shell shell toggle io.github.shazzedio.touchdeck '{}'")
 ```
 
 Give the touch display a workspace of its own, so windows never open underneath the
@@ -103,12 +103,12 @@ hidden from the main monitor:
 - The icon takes the bar's active colour while the deck is on screen, however it was
   opened — the button, a keybind, or IPC.
 
-Move it like any other widget (`omarchy bar move shannon.touchdeck --section center`).
+Move it like any other widget (`omarchy bar move io.github.shazzedio.touchdeck --section center`).
 Its place in the bar *is* this plugin's entry in `shell.json`, so removing the button
 from the bar switches the whole plugin off; put it back with:
 
 ```sh
-omarchy plugin enable shannon.touchdeck --section right
+omarchy plugin enable io.github.shazzedio.touchdeck --section right
 ```
 
 ![Edit mode](docs/screenshots/edit.png)
@@ -121,16 +121,16 @@ If the deck ever misbehaves, turn it off. The rest of the shell (bar, notificati
 lock screen) carries on:
 
 ```sh
-omarchy plugin disable shannon.touchdeck
+omarchy plugin disable io.github.shazzedio.touchdeck
 omarchy-restart-shell
 ```
 
-`omarchy plugin enable shannon.touchdeck` brings it back.
+`omarchy plugin enable io.github.shazzedio.touchdeck` brings it back.
 
 ## Removing it
 
 ```sh
-omarchy plugin remove shannon.touchdeck --yes
+omarchy plugin remove io.github.shazzedio.touchdeck --yes
 ```
 
 Your layout stays at `~/.config/touchdeck/` in case you reinstall; delete that folder
@@ -192,13 +192,13 @@ Widget settings (also in each widget's settings sheet):
 ## Scripting
 
 ```sh
-omarchy-shell shell summon shannon.touchdeck '{}'             # show
-omarchy-shell shell summon shannon.touchdeck '{"edit":true}'  # show, in edit mode
-omarchy-shell shell hide   shannon.touchdeck
-omarchy-shell shell toggle shannon.touchdeck '{}'
-omarchy-shell shell call   shannon.touchdeck toggleEdit ''
-omarchy-shell shell call   shannon.touchdeck status ''        # JSON: display, helpers, config health
-omarchy-shell shell call   shannon.touchdeck intent '{"do":"mute"}'
+omarchy-shell shell summon io.github.shazzedio.touchdeck '{}'             # show
+omarchy-shell shell summon io.github.shazzedio.touchdeck '{"edit":true}'  # show, in edit mode
+omarchy-shell shell hide   io.github.shazzedio.touchdeck
+omarchy-shell shell toggle io.github.shazzedio.touchdeck '{}'
+omarchy-shell shell call   io.github.shazzedio.touchdeck toggleEdit ''
+omarchy-shell shell call   io.github.shazzedio.touchdeck status ''        # JSON: display, helpers, config health
+omarchy-shell shell call   io.github.shazzedio.touchdeck intent '{"do":"mute"}'
 ```
 
 `intent` runs anything the deck's own controls do: `volume`, `mute`, `mic`, `output`,
@@ -224,7 +224,7 @@ Install a working copy with:
 
 ```sh
 tools/check.sh \
-  && rsync -a --delete --exclude .git --exclude docs ./ ~/.config/omarchy/plugins/shannon.touchdeck/ \
+  && rsync -a --delete --exclude .git --exclude docs ./ ~/.config/omarchy/plugins/io.github.shazzedio.touchdeck/ \
   && omarchy-restart-shell
 ```
 

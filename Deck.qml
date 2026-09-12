@@ -3,7 +3,7 @@
 // Hosted inside omarchy-shell as a keepLoaded `panel` plugin (DESIGN.md D1).
 // The shell injects omarchyPath/shell/manifest onto this item if we declare
 // them, calls open(payloadJson) on summon and close() on hide, and reads back
-// `opened`. `omarchy-shell shell call shannon.touchdeck <method> <arg>` reaches
+// `opened`. `omarchy-shell shell call io.github.shazzedio.touchdeck <method> <arg>` reaches
 // any function here. All verified in Phase 0 (DECISIONS.md G-5).
 //
 // This file runs inside Shannon's desktop shell process. A blocking call here
@@ -56,8 +56,8 @@ Item {
   // do. It skips the touch layer -- that still needs a finger -- but it lets
   // the service side be verified from a script, and makes the deck scriptable
   // from keybinds (DECISIONS.md D-34). For example:
-  //   omarchy-shell shell call shannon.touchdeck intent '{"do":"volume","value":0.6}'
-  //   omarchy-shell shell call shannon.touchdeck intent '{"do":"move","id":"cpu","col":4,"row":0}'
+  //   omarchy-shell shell call io.github.shazzedio.touchdeck intent '{"do":"volume","value":0.6}'
+  //   omarchy-shell shell call io.github.shazzedio.touchdeck intent '{"do":"move","id":"cpu","col":4,"row":0}'
   signal sheetRequested(string title, var options)
   // Sheets, the bubble: things only a window can show.
   signal uiRequested(var request)

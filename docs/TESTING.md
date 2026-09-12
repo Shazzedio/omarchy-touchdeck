@@ -30,20 +30,20 @@ Only after the gate exits 0 — gate on the exit code, not on grepping its outpu
 
 ```
 tools/check.sh \
-  && rsync -a --delete --exclude .git --exclude docs ./ ~/.config/omarchy/plugins/shannon.touchdeck/ \
+  && rsync -a --delete --exclude .git --exclude docs ./ ~/.config/omarchy/plugins/io.github.shazzedio.touchdeck/ \
   && omarchy-restart-shell
 ```
 
 Useful afterwards:
 
 ```
-omarchy-shell shell call shannon.touchdeck status ''   # JSON: visibility, output, config health
+omarchy-shell shell call io.github.shazzedio.touchdeck status ''   # JSON: visibility, output, config health
 qs log -p "$OMARCHY_PATH/shell" --tail 100 | grep -i touchdeck
 hyprctl -j layers | jq '..|objects|select(.namespace?=="touchdeck")'
 grim -o HDMI-A-1 /tmp/deck.png                          # what the deck actually drew
 ```
 
-Escape hatch if the deck ever misbehaves: `omarchy plugin disable shannon.touchdeck`
+Escape hatch if the deck ever misbehaves: `omarchy plugin disable io.github.shazzedio.touchdeck`
 then `omarchy-restart-shell`.
 
 ## Sensor fixtures
@@ -62,7 +62,7 @@ Intel + NVIDIA + AMD). See `tests/fixtures/README.md`.
 verifies the service side; the touch layer still needs a finger.
 
 ```
-call() { omarchy-shell shell call shannon.touchdeck intent "$1"; }
+call() { omarchy-shell shell call io.github.shazzedio.touchdeck intent "$1"; }
 call '{"do":"volume","value":0.6}'           # and "mute", "mic"
 call '{"do":"outputs"}'                        # the output list as JSON
 call '{"do":"output","name":"alsa_output…"}'   # switch output
@@ -229,9 +229,9 @@ Run at the end of each phase. Items marked *(from Phase n)* don't apply earlier.
 - [ ] Right click opens it in edit mode.
 - [ ] The icon takes the bar's active colour while the deck is open, and follows a
       change made another way:
-      `omarchy-shell shell hide shannon.touchdeck`, then `summon`.
+      `omarchy-shell shell hide io.github.shazzedio.touchdeck`, then `summon`.
 - [ ] On a second monitor the bar shows the same state (one widget instance per bar).
-- [ ] `omarchy bar move shannon.touchdeck --section center` moves it.
+- [ ] `omarchy bar move io.github.shazzedio.touchdeck --section center` moves it.
 
 ### Media art *(from Phase 4, D-46)*
 - [ ] Skip a Spotify track: the new cover appears within a second or two, and
@@ -243,7 +243,7 @@ Run at the end of each phase. Items marked *(from Phase n)* don't apply earlier.
 - [ ] `kill -STOP` the collector: widgets dim with "△ N s ago" after 3 s, the
       watchdog kills it at ~5 s, and a new one takes over. Then `kill -9` the
       frozen pid if it's somehow still there (it shouldn't be).
-- [ ] `omarchy-shell shell hide shannon.touchdeck`, then
+- [ ] `omarchy-shell shell hide io.github.shazzedio.touchdeck`, then
       `pgrep -f touchdeck-collect` and `pgrep -f query-gpu`: nothing. Summon: both back.
 - [ ] A layout with no CPU/GPU/Memory widget runs no helpers at all.
 
@@ -272,7 +272,7 @@ while it's gone and comes back with it.
 
 ```
 hyprctl eval 'hl.monitor({ output = "HDMI-A-1", disabled = true })'
-omarchy-shell shell call shannon.touchdeck status ''    # dormant: true, with a reason
+omarchy-shell shell call io.github.shazzedio.touchdeck status ''    # dormant: true, with a reason
 hyprctl reload
-omarchy-shell shell call shannon.touchdeck status ''    # active again, output HDMI-A-1
+omarchy-shell shell call io.github.shazzedio.touchdeck status ''    # active again, output HDMI-A-1
 ```
