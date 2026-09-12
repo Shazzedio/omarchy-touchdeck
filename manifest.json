@@ -2,11 +2,24 @@
   "schemaVersion": 1,
   "id": "shannon.touchdeck",
   "name": "Touchdeck",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Shannon",
   "license": "MIT",
   "description": "Touch launchpad and system deck for a dedicated touch display.",
-  "kinds": ["panel"],
-  "entryPoints": { "panel": "Deck.qml" },
+  "kinds": [
+    "panel",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "panel": "Deck.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Touchdeck",
+    "description": "Show or hide the touch deck, or right click to open it in edit mode.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  },
   "keepLoaded": true
 }

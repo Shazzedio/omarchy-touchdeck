@@ -21,7 +21,8 @@ tools/check.sh
 | QML-engine parity | the same scenario through `lib/` in Node and in a headless `qs`, results compared — catches a library method Qt's engine lacks, which linting can't (D-21). Needs a Wayland session |
 | collector selftest | `bin/touchdeck-collect --selftest` produces two well-formed frames on this machine |
 | `shellcheck` | skipped with a warning when not installed (D-8) |
-| guards | `qs.*` imports outside the two adapters (D7), colour literals in QML, synchronous I/O in QML |
+| guards | `qs.*` imports outside the two adapters and the bar widget (D7, D-52), colour literals in QML, synchronous I/O in QML |
+| `tests/manifest.test.mjs` | a manifest, entry point or missing README/LICENSE the marketplace would reject (D-53) |
 
 ## Deploying to the running shell
 
@@ -221,6 +222,16 @@ Run at the end of each phase. Items marked *(from Phase n)* don't apply earlier.
 - [ ] Budget while dragging: `tools/measure-budget.py 20` while dragging a tile around
       continuously. Redraws should hold near 60/s, with render time per frame well
       under 16 ms.
+
+### Bar widget *(D-52)*
+- [ ] The button is in the bar (`omarchy plugin list | grep touchdeck` says enabled).
+- [ ] Left click hides the deck, left click again shows it.
+- [ ] Right click opens it in edit mode.
+- [ ] The icon takes the bar's active colour while the deck is open, and follows a
+      change made another way:
+      `omarchy-shell shell hide shannon.touchdeck`, then `summon`.
+- [ ] On a second monitor the bar shows the same state (one widget instance per bar).
+- [ ] `omarchy bar move shannon.touchdeck --section center` moves it.
 
 ### Media art *(from Phase 4, D-46)*
 - [ ] Skip a Spotify track: the new cover appears within a second or two, and

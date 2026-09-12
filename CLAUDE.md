@@ -10,8 +10,9 @@ Hard rules (from DESIGN.md §0):
 - Never edit Shannon's config files (`~/.config/hypr/*`, `~/.config/omarchy/shell.json`,
   theme files). Print the snippet and the file it belongs in instead.
   Running `omarchy plugin ...` / `omarchy-shell shell ...` is fine.
-- Only `services/DeckTheme.qml` and `components/DeckSurface.qml` may import
-  `qs.Commons` or `qs.Ui` (D7). Everything else styles through `DeckTheme`.
+- Only `services/DeckTheme.qml`, `components/DeckSurface.qml` and `BarWidget.qml`
+  may import `qs.Commons` or `qs.Ui` (D7, D-52). Everything else styles through
+  `DeckTheme`; the bar widget is built from Omarchy's own bar controls.
 - No colour literals in QML outside `tests/`.
 - No synchronous file or process I/O in QML — the deck runs inside the desktop
   shell process (§15).

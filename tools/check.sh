@@ -163,14 +163,16 @@ fi
 # ---------------------------------------------------------------- 6. guards
 
 step "theme adapter boundary (D7)"
-# Only DeckTheme.qml and DeckSurface.qml may reach for Omarchy's singletons.
-# Everything else goes through a DeckTheme instance, which is what keeps the
-# blast radius of an upstream token change to two files.
+# Only DeckTheme.qml, DeckSurface.qml and BarWidget.qml may reach for Omarchy's
+# singletons. Everything else goes through a DeckTheme instance, which is what
+# keeps the blast radius of an upstream token change to three files. The bar
+# widget is there because a widget in Omarchy's bar has to be built from the
+# bar's own controls to match the widgets beside it (D-52).
 LEAKS="$(qml_files |
-  grep -vE '(services/DeckTheme|components/DeckSurface)\.qml$' |
+  grep -vE '(services/DeckTheme|components/DeckSurface|BarWidget)\.qml$' |
   xargs grep -ln '^import qs\.\(Commons\|Ui\)' 2>/dev/null || true)"
 if [[ -z "$LEAKS" ]]; then
-  ok "qs.Commons / qs.Ui confined to the two adapters"
+  ok "qs.Commons / qs.Ui confined to the adapters and the bar widget"
 else
   printf '    %s\n' $LEAKS
   bad "qs.* imported outside the adapter files"

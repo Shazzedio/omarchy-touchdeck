@@ -1020,3 +1020,69 @@ off with a live `eval` takes effect at the next reload or shell restart.
   repository. They're downscaled to 1600 px.
 - **Version.** The manifest is at 1.0.0, tagged `v1.0.0`. It isn't published to a
   marketplace and has no git remote; that's Shannon's call.
+
+## Bar widget ground truth
+
+### G-20 What "enabled" means for a bar-widget plugin
+
+Two different answers, and they matter for a plugin that is also something else:
+
+- `omarchy plugin list` (the shell's `listPlugins`) reports `enabled` for a
+  **bar-widget** kind as *is it in the bar layout* (`PluginRegistry.inBar`), not
+  whether its code loads.
+- `PluginRegistry.isEnabled`, which gates `summon`/`hide`/`toggle`, is broader: an
+  entry in `shell.json`'s `plugins[]` **or** in the bar layout counts.
+
+So after adding the `bar-widget` kind, the deck still ran and still toggled over IPC,
+while `omarchy plugin list` called it disabled — it had a `plugins[]` entry but no bar
+entry.
+
+Worse, neither `omarchy bar put shannon.touchdeck --section right` nor
+`omarchy plugin enable shannon.touchdeck --section right` would place it: both print
+success, but `setEnabled` only inserts into the bar when the plugin is found nowhere
+else, and the `plugins[]` entry counts as found. `omarchy plugin disable` (which
+removed that entry) followed by `omarchy plugin enable ... --section right` placed it.
+
+**Consequence.** For a plugin that is both a panel and a bar widget, the bar entry is
+its enablement: drag the button out of the bar and the whole plugin switches off.
+Said plainly in the README, with the command to put it back.
+
+## Calls made for the bar button
+
+### D-52 The bar button is a second kind on the same plugin
+
+**Why.** Shannon wants to show and hide the deck from the main monitor, without a
+keybind or a terminal.
+
+**Decision.**
+- `kinds: ["panel", "bar-widget"]`, `entryPoints.barWidget = "BarWidget.qml"`, plus the
+  `barWidget` metadata block the marketplace expects (displayName, description,
+  category `System`, `allowMultiple: false`, `defaultSection: "right"`).
+- The widget owns **no panel of its own**. The deck stays the `panel` entry point and
+  the shell keeps its loader — `shell.isBarWidgetPanelPlugin` deliberately excludes
+  plugins that also declare `panel` — so the button only calls
+  `bar.shell.summon/hide/toggle` and mirrors `bar.shell.isPluginOpen`.
+- Left click toggles the deck; right click summons it with `{"edit": true}`; the icon
+  takes the bar's active colour while the deck is open, however it was opened.
+- The icon is Nerd Font U+F0379 (monitor), one of the glyphs Omarchy's own OSD uses,
+  so it is certain to be in the bar's font.
+- **The D7 boundary now covers three files.** A bar widget has to extend Omarchy's own
+  `BarWidget` and `WidgetButton`, or it will not match the widgets beside it, so
+  `BarWidget.qml` may import `qs.Ui`. `tools/check.sh` allows exactly that file.
+
+**Consequence.** Verified live: the button sits at the head of the bar's right
+section, toggles the deck, and follows the deck's state when it is opened another way.
+It is the only part of the deck a mouse user on the main monitor ever needs.
+
+### D-53 Marketplace readiness
+
+Against `plugins.omarchy.org/develop.html`:
+
+- **Done.** Manifest fields and kind/entry-point alignment; `barWidget` metadata; a
+  README covering install, usage, configuration, removal, dependencies and privilege
+  boundaries; `LICENSE`; `preview.png`; no symlinks. `tests/manifest.test.mjs` checks
+  all of it in the gate, so a manifest the marketplace would reject fails here first.
+- **Shannon's call.** Publication wants a reverse-domain id such as
+  `io.github.<user>.touchdeck`; D-6 froze the id as `shannon.touchdeck`, and changing
+  it moves the plugin directory and the `shell.json` entry. Submission also needs a
+  public git repository; this one has no remote yet.
