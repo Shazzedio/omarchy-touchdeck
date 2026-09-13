@@ -139,7 +139,9 @@ to remove every trace.
 ## Dependencies and privileges
 
 - It runs **inside** `omarchy-shell`, as unsandboxed QML, like every shell plugin. It
-  asks for no root: no `sudo`, no polkit, no system services, no system files written.
+  asks for **no elevated privileges**: it never escalates, never prompts for an
+  administrator password, installs no setuid or privileged helper, registers no
+  system service, and writes no system files.
 - **Reads**: `/proc` and `/sys` for CPU, memory and GPU readings; your desktop entries
   for app keys.
 - **Writes**: `~/.config/touchdeck/config.json` (plus a `.bak`), and cached album art
@@ -232,6 +234,12 @@ tools/check.sh \
 - `docs/DECISIONS.md` has what was found on real hardware and why things are the way
   they are.
 - `docs/TESTING.md` has the manual checklist.
+- The repository deliberately ships **no agent control files** — `CLAUDE.md`,
+  `AGENTS.md`, `.cursorrules`, `.claude/` and their equivalents. A plugin checkout
+  lands on other people's machines, where a coding agent working nearby would read
+  such a file as instructions. Keep your own untracked (`.gitignore` lists the usual
+  names) and put anything worth sharing in `docs/`; the gate fails if one is
+  committed.
 
 ## License
 

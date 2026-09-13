@@ -5,6 +5,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync, existsSync, lstatSync, readdirSync } from "node:fs"
+import { execFileSync } from "node:child_process"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -78,4 +79,46 @@ test("plugin folder: what the marketplace asks for, and no symlinks", function (
     }
   }
   walk(ROOT)
+})
+
+// Agent control files -- CLAUDE.md, AGENTS.md, .cursorrules, .claude/ and the
+// like -- are ingested automatically as instructions by coding agents working
+// in or near a checkout. This repository *is* the plugin, and it gets cloned
+// onto other people's machines, so one committed here is an instruction
+// injection surface that has nothing to do with what the deck does
+// (DESIGN.md 0.7, DECISIONS.md D-55). Project guidance lives in docs/ instead.
+// A personal copy is fine as long as it stays untracked; .gitignore lists the
+// usual names.
+const AGENT_CONTROL_FILE =
+  /^(claude|claude\.local|agent|agents|gemini|qwen|codex|copilot-instructions)\.md$|^\.(cursorrules|windsurfrules|clinerules|goosehints|roomodes)$|^\.aider\.conf\.ya?ml$|^\.mcp\.json$/i
+const AGENT_CONTROL_DIR = /^\.(claude|cursor|codex|gemini|continue|windsurf|roo|opencode|aider)$/i
+
+// What actually ships: the tracked files in a checkout, or everything present
+// in an already-installed plugin directory.
+function shippedPaths() {
+  if (existsSync(join(ROOT, ".git"))) {
+    const out = execFileSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" })
+    return out.split("\0").filter(function (p) { return p.length > 0 })
+  }
+  const paths = []
+  const walk = function (dir, prefix) {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name)
+      if (lstatSync(path).isDirectory()) walk(path, prefix + name + "/")
+      else paths.push(prefix + name)
+    }
+  }
+  walk(ROOT, "")
+  return paths
+}
+
+test("plugin folder: no agent control files ship with the plugin", function () {
+  for (const path of shippedPaths()) {
+    const segments = path.split("/")
+    const name = segments[segments.length - 1]
+    assert.ok(!AGENT_CONTROL_FILE.test(name), "agent control file: " + path)
+    for (const dir of segments.slice(0, -1)) {
+      assert.ok(!AGENT_CONTROL_DIR.test(dir), "agent control directory: " + path)
+    }
+  }
 })

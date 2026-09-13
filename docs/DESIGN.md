@@ -1,6 +1,6 @@
 # Touchdeck: a touch launchpad for Omarchy
 
-Design and build plan, written for Claude Code.
+Design and build plan.
 
 | | |
 |---|---|
@@ -12,18 +12,17 @@ Design and build plan, written for Claude Code.
 
 ---
 
-## 0. Read this first (instructions for Claude Code)
+## 0. Read this first (ground rules)
 
-You will build this in phases (§17). These rules apply throughout.
+The deck is built in phases (§17). These rules apply to anyone working on it, throughout.
 
 1. **Installed reality beats this document.** Omarchy Quattro, its shell plugin API, Quickshell, and Hyprland's Lua config are newer than most training data and still moving. Before writing code that touches them, read the installed sources: `$OMARCHY_PATH/shell/README.md`, the first-party plugins under `$OMARCHY_PATH/shell/plugins/` (these are the reference implementations), the `Commons` and `Ui` QML modules under `$OMARCHY_PATH/shell/`, and the Quickshell documentation for the version `qs --version` reports. Where this plan and the installed code disagree, follow the installed code and record the deviation in `docs/DECISIONS.md`.
 2. **Never modify** anything under `$OMARCHY_PATH` or `/usr/share/omarchy`, and never edit Shannon's own config files (`~/.config/hypr/*`, `~/.config/omarchy/shell.json`, theme files). When a config change is needed, print the snippet and the file it belongs in, and let Shannon apply it. Running Omarchy's own commands (`omarchy plugin enable`, `omarchy-shell shell ...`) is fine; they are the supported way to change shell state.
-3. **Locked decisions (§3) need Shannon's agreement to change.** Everything else is your call. Record significant calls in `docs/DECISIONS.md`, one short paragraph each covering context, decision and consequence.
+3. **Locked decisions (§3) need Shannon's agreement to change.** Everything else is the implementer's call. Record significant calls in `docs/DECISIONS.md`, one short paragraph each covering context, decision and consequence.
 4. **One phase at a time.** Meet the phase's acceptance criteria, run `tools/check.sh`, update `docs/PROGRESS.md`, then stop and summarise for Shannon before starting the next phase.
 5. **The deck runs inside the desktop shell process.** A blocking call or runaway loop freezes Shannon's bar, notifications and lock screen, not just the deck. No synchronous file or process I/O in QML. Follow §15.
 6. At the start of Phase 0, ask Shannon the open questions in §18 that are still unanswered.
-
-Suggested repo setup: save this file as `docs/DESIGN.md` and create a `CLAUDE.md` at the repo root containing: "Read docs/DESIGN.md §0 and §3 before any work. Current phase and status live in docs/PROGRESS.md. Run tools/check.sh before declaring anything done."
+7. **No agent control files in the repository.** `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `.claude/` and their equivalents are ingested automatically as instructions by coding agents working in or near a checkout, and this repository is a plugin that gets cloned onto other people's machines — so shipping one is an instruction-injection surface that has nothing to do with what the plugin does. Project guidance lives in `docs/`, where it is read deliberately rather than absorbed. `.gitignore` lists the usual names, so a personal copy stays local; `tools/check.sh` and `tests/manifest.test.mjs` fail if one is ever committed (D-55).
 
 ---
 

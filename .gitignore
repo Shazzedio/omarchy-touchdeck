@@ -2,3 +2,31 @@ node_modules/
 *.log
 .tmp/
 __pycache__/
+
+# Agent control files. This repository is distributed as an Omarchy plugin and
+# gets cloned onto other people's machines, where files like these are ingested
+# automatically as instructions by coding agents. Keep project guidance in
+# docs/ instead; a personal copy here stays local and is never committed.
+CLAUDE.md
+CLAUDE.local.md
+AGENT.md
+AGENTS.md
+GEMINI.md
+QWEN.md
+CODEX.md
+.cursorrules
+.windsurfrules
+.clinerules
+.goosehints
+.aider.conf.yml
+.mcp.json
+.roomodes
+.claude/
+.cursor/
+.codex/
+.gemini/
+.continue/
+.windsurf/
+.roo/
+.opencode/
+.github/copilot-instructions.md

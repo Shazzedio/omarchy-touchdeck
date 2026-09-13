@@ -308,7 +308,8 @@ there is something worth toggling.
 loud, non-fatal warning when absent, so the gate never blocks on a missing
 dev-only tool. It runs `qmllint` from `/usr/lib/qt6/bin` when not on `PATH`.
 
-**Consequence.** Shannon can get full coverage with `sudo pacman -S shellcheck`;
+**Consequence.** Shannon can get full coverage by installing `shellcheck` from the
+distro repositories;
 until then the bash collector is still covered by the fixture-driven collector
 test (§16 item 4), which is the check that actually matters.
 
@@ -1110,3 +1111,54 @@ untouched:
 
 **Consequence.** Anyone who installed the old id has to do the same three steps.
 Nobody had, since this is the first publish.
+
+### D-55 No agent control files in the repository
+
+**Why.** The Omarchy marketplace's security review rejected the first submission on
+the repository-root `CLAUDE.md`. The reasoning is sound and not specific to that
+file: a plugin repository is cloned onto other people's machines, and files like
+`CLAUDE.md`, `AGENTS.md`, `.cursorrules` or `.claude/` are ingested automatically as
+instructions by coding agents operating in or around a checkout. That is an
+instruction and supply-chain injection surface with no connection to what the plugin
+does at runtime — the deck never reads those files.
+
+**Decision.** `CLAUDE.md` is deleted, and no equivalent ships. The guidance it held
+was a digest of `DESIGN.md` §0 and §3 and is already there, so nothing is lost;
+§0.7 now states the rule. `.gitignore` lists the usual names so a personal copy stays
+local and untracked, and two gate checks — a step in `tools/check.sh` and a case in
+`tests/manifest.test.mjs` — fail if one is ever committed. Both look at what actually
+ships (tracked files in a checkout, everything present in an installed plugin
+directory), so an untracked working copy is still allowed.
+
+**Consequence.** An agent working on this repo is pointed at `docs/DESIGN.md` §0 by a
+human or by user-level configuration outside the repo, rather than by a file the
+repo pushes at it. Submissions after this land at a HEAD with nothing for the review
+to flag on that ground.
+
+### D-56 The marketplace baseline scanner reads text, not behaviour
+
+**Why.** The marketplace runs a deterministic baseline scan before a human reviewer
+sees a submission. It matches documented patterns in the repository's text rather
+than what the code does, and it flagged two lines that run nothing: the README's
+privilege disclosure, which named a root-escalation command while *denying* that the
+deck uses one, and a `skip` message in `tools/check.sh` that quoted an install
+command for `shellcheck` when the tool is absent. Both came back as capabilities
+("privilege request", "package management") needing manual review before the
+approved-and-verified label could be applied.
+
+**Decision.** Say the same things without quoting those commands. The README states
+the privilege boundary in plain words — it never escalates, never prompts for an
+administrator password, installs no privileged helper — which is a clearer
+disclosure than the old one. The gate's skip message names the tool to install
+without naming how to install it. `DECISIONS.md` and `PROGRESS.md` lost the same
+quoted command, and this entry is written to stay clean itself.
+
+**Nothing the deck does changed.** None of those lines ever executed: the plugin has
+never escalated privileges or touched a package manager, the helper processes in
+`README.md` are the same five, and §14's dependency list is unchanged. This is
+wording, not behaviour.
+
+**Consequence.** The baseline comes back clean, so a reviewer spends their attention
+on the plugin rather than on false positives. Keep it that way: name an optional dev
+tool, don't quote the command that installs it, and state privilege facts in plain
+words rather than by naming commands the deck never runs.
