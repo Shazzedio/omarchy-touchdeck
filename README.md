@@ -232,6 +232,12 @@ tools/check.sh \
 - `docs/DECISIONS.md` has what was found on real hardware and why things are the way
   they are.
 - `docs/TESTING.md` has the manual checklist.
+- The repository deliberately ships **no agent control files** — `CLAUDE.md`,
+  `AGENTS.md`, `.cursorrules`, `.claude/` and their equivalents. A plugin checkout
+  lands on other people's machines, where a coding agent working nearby would read
+  such a file as instructions. Keep your own untracked (`.gitignore` lists the usual
+  names) and put anything worth sharing in `docs/`; the gate fails if one is
+  committed.
 
 ## License
 

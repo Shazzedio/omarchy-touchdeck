@@ -413,6 +413,14 @@ Known limits for anyone else installing it:
       calls "enabled" *being in the bar*, and `omarchy bar put` / `plugin enable`
       silently do nothing while the plugin is placed anywhere else. Disable, then
       enable with a placement.
+- [x] **Renamed the plugin id** to `io.github.shazzedio.touchdeck` for publication
+      (D-54), and pushed the repository to a public remote.
+- [x] **Removed the repository-root `CLAUDE.md`** (D-55). The marketplace's security
+      review blocked the first submission on it: agent control files shipped in a
+      plugin are read automatically as instructions by coding agents operating in or
+      around the checkout. Nothing equivalent ships now, `.gitignore` keeps a
+      personal copy local and untracked, and both `tools/check.sh` and
+      `tests/manifest.test.mjs` fail if one is ever committed.
 
-Still Shannon's call before publishing: a reverse-domain plugin id (D-6 froze
-`io.github.shazzedio.touchdeck`), and a public git remote to submit.
+Next: trigger a fresh marketplace validation at the new default-branch HEAD.
+

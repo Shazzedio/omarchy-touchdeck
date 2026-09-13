@@ -1110,3 +1110,27 @@ untouched:
 
 **Consequence.** Anyone who installed the old id has to do the same three steps.
 Nobody had, since this is the first publish.
+
+### D-55 No agent control files in the repository
+
+**Why.** The Omarchy marketplace's security review rejected the first submission on
+the repository-root `CLAUDE.md`. The reasoning is sound and not specific to that
+file: a plugin repository is cloned onto other people's machines, and files like
+`CLAUDE.md`, `AGENTS.md`, `.cursorrules` or `.claude/` are ingested automatically as
+instructions by coding agents operating in or around a checkout. That is an
+instruction and supply-chain injection surface with no connection to what the plugin
+does at runtime — the deck never reads those files.
+
+**Decision.** `CLAUDE.md` is deleted, and no equivalent ships. The guidance it held
+was a digest of `DESIGN.md` §0 and §3 and is already there, so nothing is lost;
+§0.7 now states the rule. `.gitignore` lists the usual names so a personal copy stays
+local and untracked, and two gate checks — a step in `tools/check.sh` and a case in
+`tests/manifest.test.mjs` — fail if one is ever committed. Both look at what actually
+ships (tracked files in a checkout, everything present in an installed plugin
+directory), so an untracked working copy is still allowed.
+
+**Consequence.** An agent working on this repo is pointed at `docs/DESIGN.md` §0 by a
+human or by user-level configuration outside the repo, rather than by a file the
+repo pushes at it. Submissions after this land at a HEAD with nothing for the review
+to flag on that ground.
+

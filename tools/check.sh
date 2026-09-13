@@ -57,6 +57,29 @@ else
   bad "symlinks are not allowed inside a plugin folder"
 fi
 
+# DESIGN.md 0.7: CLAUDE.md, AGENTS.md, .cursorrules, .claude/ and their
+# equivalents are ingested automatically as instructions by coding agents
+# working in or near a checkout. This repo is the plugin and gets cloned onto
+# other people's machines, so a committed one is an instruction-injection
+# surface unrelated to the deck (DECISIONS.md D-55). Guidance lives in docs/.
+# A personal copy is fine while it stays untracked, so this looks at what ships.
+step "no agent control files"
+AGENT_FILES='(^|/)(CLAUDE|CLAUDE\.local|AGENT|AGENTS|GEMINI|QWEN|CODEX|copilot-instructions)\.md$'
+AGENT_FILES+='|(^|/)\.(cursorrules|windsurfrules|clinerules|goosehints|roomodes)$'
+AGENT_FILES+='|(^|/)\.aider\.conf\.ya?ml$|(^|/)\.mcp\.json$'
+AGENT_FILES+='|(^|/)\.(claude|cursor|codex|gemini|continue|windsurf|roo|opencode|aider)/'
+if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  mapfile -t AGENT_HITS < <(git -C "$REPO" ls-files | grep -iE "$AGENT_FILES" || true)
+else
+  mapfile -t AGENT_HITS < <(find "$REPO" -not -path '*/.git/*' | sed "s|^$REPO/||" | grep -iE "$AGENT_FILES" || true)
+fi
+if ((${#AGENT_HITS[@]} == 0)); then
+  ok "none"
+else
+  printf '    %s\n' "${AGENT_HITS[@]}"
+  bad "agent control files must not ship with the plugin"
+fi
+
 # ---------------------------------------------------------------- 2. qmllint
 
 step "qmllint"
