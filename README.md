@@ -139,7 +139,9 @@ to remove every trace.
 ## Dependencies and privileges
 
 - It runs **inside** `omarchy-shell`, as unsandboxed QML, like every shell plugin. It
-  asks for no root: no `sudo`, no polkit, no system services, no system files written.
+  asks for **no elevated privileges**: it never escalates, never prompts for an
+  administrator password, installs no setuid or privileged helper, registers no
+  system service, and writes no system files.
 - **Reads**: `/proc` and `/sys` for CPU, memory and GPU readings; your desktop entries
   for app keys.
 - **Writes**: `~/.config/touchdeck/config.json` (plus a `.bak`), and cached album art

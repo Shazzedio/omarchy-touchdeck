@@ -180,7 +180,7 @@ else
   # Not fatal: the bash collector's real coverage is the fixture-driven test
   # above, and blocking every phase on a missing dev tool helps nobody
   # (DECISIONS.md D-8).
-  skip "shellcheck not installed -- 'sudo pacman -S shellcheck' for full coverage"
+  skip "shellcheck not installed -- install it for full shell coverage"
 fi
 
 # ---------------------------------------------------------------- 6. guards

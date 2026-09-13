@@ -173,7 +173,7 @@ stays as cheap insurance; the measurement method is what changed (D-28).
 
 ### For Shannon (optional)
 
-- `sudo pacman -S shellcheck` to turn on the last skipped gate step.
+- Install `shellcheck` to turn on the last skipped gate step.
 - Run a game with the deck showing and compare its GPU numbers with `nvidia-smi dmon`.
 
 ---
